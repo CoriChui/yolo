@@ -1,0 +1,107 @@
+# Debug Session Template
+#
+# Session file for tracking debug investigation.
+# Location: .planning/debug/{slug}/session.yaml
+# ─────────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════
+# IDENTIFICATION & STATUS (OVERWRITE on status change)
+# ═══════════════════════════════════════════════════════════════
+
+id: null                          # Session slug (e.g., "auth-token-expired")
+status: gathering                 # gathering | investigating | fixing | verifying | resolved | abandoned
+created: null                     # ISO 8601 date
+updated: null                     # ISO 8601 date
+
+# ═══════════════════════════════════════════════════════════════
+# TRIGGER (IMMUTABLE after creation)
+# ═══════════════════════════════════════════════════════════════
+
+trigger: null                     # Verbatim user description of the issue
+# Example:
+#   trigger: |
+#     API returns 500 error when submitting login form
+#     with special characters in password
+
+# ═══════════════════════════════════════════════════════════════
+# CURRENT FOCUS (OVERWRITE on each update - always reflects NOW)
+# ═══════════════════════════════════════════════════════════════
+
+focus:
+  hypothesis: null                # Current theory being tested
+  test: null                      # How testing it
+  expecting: null                 # What result means if true/false
+  next: "Gather symptoms"         # Immediate next action
+
+# ═══════════════════════════════════════════════════════════════
+# SYMPTOMS (IMMUTABLE after gathering)
+# ═══════════════════════════════════════════════════════════════
+
+symptoms:
+  expected: null                  # What should happen
+  actual: null                    # What actually happens
+  errors: null                    # Error messages if any
+  reproduction: null              # How to trigger
+  timeline: null                  # When it started / always broken
+
+# ═══════════════════════════════════════════════════════════════
+# ELIMINATED (APPEND only - critical for context reset survival)
+# ═══════════════════════════════════════════════════════════════
+
+# Hypotheses that were disproved (prevents re-investigating)
+eliminated: []
+# Example:
+#   - hypothesis: "Cache issue"
+#     evidence: "Cache disabled, same behavior"
+#     when: "2026-02-03"
+#
+#   - hypothesis: "Network timeout"
+#     evidence: "Local requests also fail"
+#     when: "2026-02-03"
+
+# ═══════════════════════════════════════════════════════════════
+# EVIDENCE (APPEND only)
+# ═══════════════════════════════════════════════════════════════
+
+# Facts discovered during investigation
+evidence: []
+# Example:
+#   - checked: "Redis logs"
+#     found: "TTL set to 60s"
+#     implication: "Token expires in 1 min"
+#     when: "2026-02-03"
+#
+#   - checked: "Config file"
+#     found: "No TTL override"
+#     implication: "Using default"
+#     when: "2026-02-03"
+
+# ═══════════════════════════════════════════════════════════════
+# RESOLUTION (OVERWRITE as understanding evolves)
+# ═══════════════════════════════════════════════════════════════
+
+resolution:
+  root_cause: null                # The actual cause
+  fix: null                       # What was done to fix it
+  verification: null              # How the fix was verified
+  files_changed: []               # List of modified files
+# Example:
+#   resolution:
+#     root_cause: "Redis TTL was set to 60s instead of 3600s"
+#     fix: "Updated config/redis.yaml TTL setting"
+#     verification: "Token persists for 1 hour in test"
+#     files_changed:
+#       - "config/redis.yaml"
+#       - "src/auth/token.ts"
+
+# ─────────────────────────────────────────────────────────────────
+# SECTION RULES (for Claude reference)
+# ─────────────────────────────────────────────────────────────────
+#
+# - id/status/created/updated: OVERWRITE on status change
+# - trigger:     IMMUTABLE after creation
+# - focus:       OVERWRITE on each update (always reflects NOW)
+# - symptoms:    IMMUTABLE after gathering
+# - eliminated:  APPEND only (critical for context reset survival)
+# - evidence:    APPEND only
+# - resolution:  OVERWRITE as understanding evolves

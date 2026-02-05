@@ -1,0 +1,122 @@
+# Research Implementation: Thorough
+# ═══════════════════════════════════════════════════════════════════════════════
+# Deep codebase exploration with intake analysis and external research
+# ═══════════════════════════════════════════════════════════════════════════════
+
+implements: research
+variant: thorough
+description: Deep codebase exploration with intake materials and external research
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+model: opus
+
+config:
+  depth: deep
+  include_external: true
+  include_intake: true
+  max_files: 50
+  follow_imports: true
+  interactive: false
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TOOLS
+# ───────────────────────────────────────────────────────────────────────────────
+
+tools:
+  - Read
+  - Glob
+  - Grep
+  - WebSearch
+  - WebFetch
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION PROMPT
+# ───────────────────────────────────────────────────────────────────────────────
+
+prompt: |
+  You are conducting **thorough research**. Leave no stone unturned.
+
+  ## Your Task
+
+  **Goal:** ${input.goal}
+  **Scope:** ${input.scope}
+  **Intake:** ${input.intake ? input.intake.path : "No intake provided"}
+
+  ## Process
+
+  ### Phase 1: Intake Analysis (if provided)
+
+  > This phase is conditional on intake being provided. Skip if no intake.
+
+  If intake materials are available:
+
+  1. Read intake manifest at `${input.intake?.path}/manifest.yaml`
+  2. For each **high-priority** source:
+     - Read the digest file (e.g., `figma/digest.md`, `notion/digest.md`)
+     - Extract: requirements, constraints, design decisions
+     - Note: UI components, user flows, data structures specified
+  3. Create `intake_insights` list with source attribution
+
+  ### Phase 2: Codebase Exploration
+
+  4. **Map structure** — Use Glob to understand directory layout
+     ```
+     Glob: ${input.scope}/**/*
+     ```
+
+  5. **Identify key files** by pattern:
+     - Entry points: `index.ts`, `main.ts`, `app.ts`
+     - Types: `types.ts`, `*.types.ts`, `interfaces/`
+     - Config: `*.config.*`, `.env.example`
+
+  6. **Read core abstractions** — Start with types and interfaces
+
+  7. **Trace dependencies** — Follow imports to understand relationships
+
+  8. **Search for patterns** — Use Grep to find conventions:
+     ```
+     Grep: "export (interface|type|class)"
+     Grep: "import .* from"
+     ```
+
+  ### Phase 3: Gap Analysis
+
+  9. **Compare intake to codebase**:
+     - What does intake require?
+     - What currently exists?
+     - What's missing?
+
+  10. **Identify concerns**:
+      - Inconsistencies between intake and code
+      - Technical debt that affects the goal
+      - Patterns that conflict with requirements
+
+  11. **External research** (if include_external):
+      - Search for best practices related to the goal
+      - Look up documentation for libraries used
+      - Find solutions to identified concerns
+
+  ### Phase 4: Synthesis
+
+  12. **Combine findings**:
+      - Merge codebase observations with intake insights
+      - Prioritize gaps by impact on goal
+      - Suggest implementation approach
+
+  13. **Structure output**:
+      - Clear findings summary
+      - Prioritized file list
+      - Documented patterns
+      - Actionable gaps and suggestions
+
+  ## Quality Checklist
+
+  Before completing:
+  - [ ] Read at least 10 key files in depth
+  - [ ] Documented all patterns found
+  - [ ] If intake provided, all high-priority sources analyzed
+  - [ ] Gaps have clear requirement → current state → missing
+  - [ ] Suggestions are actionable

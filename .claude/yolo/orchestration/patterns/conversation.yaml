@@ -1,0 +1,310 @@
+# Pattern: Conversation
+# ═══════════════════════════════════════════════════════════════════════════════
+# Multi-agent debate pattern for design decisions
+# Used by: decide-conversation agent
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: conversation
+description: Multi-perspective debate for design decisions
+version: 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# PERSPECTIVES
+# ───────────────────────────────────────────────────────────────────────────────
+
+perspectives:
+  architect:
+    name: Architect
+    icon: "🏛️"
+    color: blue
+
+    focus:
+      - Long-term maintainability
+      - Clean patterns and abstractions
+      - System coherence and consistency
+      - Scalability implications
+
+    # NOTE: 'questions' maps to 'asks' in the decide contract schema.
+    questions:
+      - "Will this scale to 10x the current load?"
+      - "Is this maintainable by a new developer?"
+      - "Does it fit the existing architecture?"
+      - "What's the impact on other systems?"
+
+    bias: "Prefers clean design over quick fixes"
+
+    # Prompt is injected during conversation rounds to prime this perspective's voice.
+    prompt: |
+      You are the **Architect** perspective.
+
+      You care deeply about:
+      - Long-term maintainability
+      - Clean, consistent patterns
+      - System coherence
+      - Avoiding technical debt
+
+      When evaluating options, ask:
+      - Will this scale?
+      - Is it maintainable?
+      - Does it fit our architecture?
+      - What's the 2-year impact?
+
+      You tend to prefer:
+      - Proper abstractions over quick hacks
+      - Established patterns over novel approaches
+      - Consistency over optimization
+
+      Don't be dogmatic, but advocate for sustainable design.
+
+  pragmatist:
+    name: Pragmatist
+    icon: "🚀"
+    color: green
+
+    focus:
+      - Shipping working code
+      - Minimal viable solutions
+      - Avoiding over-engineering
+      - Time-to-value
+
+    # NOTE: 'questions' maps to 'asks' in the decide contract schema.
+    questions:
+      - "Does it actually work?"
+      - "Can we ship this today?"
+      - "Are we over-engineering?"
+      - "What's the simplest thing that works?"
+
+    bias: "Prefers working code over perfect design"
+
+    # Prompt is injected during conversation rounds to prime this perspective's voice.
+    prompt: |
+      You are the **Pragmatist** perspective.
+
+      You care deeply about:
+      - Shipping working software
+      - Solving the actual problem
+      - Avoiding over-engineering
+      - Getting value to users quickly
+
+      When evaluating options, ask:
+      - Does it work?
+      - Can we ship it soon?
+      - Are we building more than we need?
+      - What's the MVP version?
+
+      You tend to prefer:
+      - Working code over perfect design
+      - Simple solutions over clever ones
+      - YAGNI - don't build what you don't need
+
+      Push back on complexity, but recognize when it's justified.
+
+  critic:
+    name: Critic
+    icon: "🔍"
+    color: red
+
+    focus:
+      - What could go wrong
+      - Edge cases and failure modes
+      - Security implications
+      - Error handling
+
+    # NOTE: 'questions' maps to 'asks' in the decide contract schema.
+    questions:
+      - "What happens when this fails?"
+      - "What are we not considering?"
+      - "What's the worst case scenario?"
+      - "How could this be exploited?"
+
+    bias: "Prefers defensive code and explicit handling"
+
+    # Prompt is injected during conversation rounds to prime this perspective's voice.
+    prompt: |
+      You are the **Critic** perspective.
+
+      You care deeply about:
+      - What could go wrong
+      - Edge cases and failure modes
+      - Security vulnerabilities
+      - Explicit error handling
+
+      When evaluating options, ask:
+      - What happens when this fails?
+      - What edge cases are we missing?
+      - What's the security impact?
+      - How do we handle errors?
+
+      You tend to prefer:
+      - Defensive coding
+      - Explicit over implicit
+      - Handling edge cases
+      - Failing safely
+
+      Be the voice of caution, but don't block progress unnecessarily.
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CONVERSATION FLOW
+# ───────────────────────────────────────────────────────────────────────────────
+
+flow:
+  # NOTE: Conversation "rounds" correspond to methodology "phases" in the
+  # decide baseline. Round 1 (Propose) = Phase 1, Round 2 (Challenge) = Phase 2,
+  # Round 3 (Converge) = Phase 3.
+  rounds: 3
+
+  round_1:
+    name: Propose
+    description: Each perspective proposes their preferred approach
+
+    structure:
+      for_each: perspective
+      output: |
+        **${perspective.icon} ${perspective.name}:**
+
+        I recommend **${preferred_option}** because:
+        - ${reason_1}
+        - ${reason_2}
+        - ${reason_3}
+
+        This aligns with ${perspective.focus[0]} and ${perspective.focus[1]}.
+
+  round_2:
+    name: Challenge
+    description: Each perspective challenges the others
+
+    structure:
+      for_each: perspective
+      challenges: other_perspectives
+      output: |
+        **${perspective.icon} ${perspective.name} challenges:**
+
+        To ${other.name}: ${challenge}
+        To ${other.name}: ${challenge}
+
+  round_3:
+    name: Converge
+    description: Synthesize and reach decision
+
+    structure:
+      synthesize: all_perspectives
+      output: |
+        **Synthesis:**
+
+        Given the priority of **${priority}**, the perspectives converge:
+
+        - ${architect.name} accepts: ${architect.concession}
+        - ${pragmatist.name} accepts: ${pragmatist.concession}
+        - ${critic.name} accepts: ${critic.acceptable_risk}
+
+        **Decision:** ${final_decision}
+
+        **Why this wins:**
+        - ${key_factor_1}
+        - ${key_factor_2}
+
+        **Dissenting views (valid but outweighed):**
+        - ${dissent_1}
+
+        **Confidence:** ${confidence}
+        **Revisit triggers:**
+        - ${revisit_trigger_1}
+        - ${revisit_trigger_2}
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CONSENSUS
+# ───────────────────────────────────────────────────────────────────────────────
+
+consensus:
+  # Qualitative consensus rule: at least 2 of 3 perspectives must converge on
+  # the same recommendation (majority agreement across perspectives).
+  threshold: majority  # at least 2 of 3 perspectives converge
+
+  # How to measure agreement
+  measure:
+    - All perspectives can live with the decision
+    - Major concerns are addressed or acknowledged
+    - Priority is respected in final choice
+
+  # If no consensus
+  on_deadlock:
+    action: defer_to_priority
+    # Priority values must align with the contract's priority enum:
+    # [speed, quality, maintainability, security]
+    priorities:
+      - speed
+      - quality
+      - maintainability
+      - security
+    explanation: |
+      When perspectives strongly disagree, use the stated priority:
+      - speed → favor Pragmatist
+      - quality → favor Architect
+      - maintainability → favor Architect
+      - security → favor Critic
+
+# ───────────────────────────────────────────────────────────────────────────────
+# DERIVATION RULES
+# ───────────────────────────────────────────────────────────────────────────────
+
+# How to compute confidence and revisit_triggers from round outputs.
+derivation:
+  confidence:
+    description: >
+      Derive confidence from the degree of convergence in Round 3.
+    rules:
+      - high: All 3 perspectives converge with no significant dissent.
+      - medium: 2 of 3 perspectives converge; one dissents but concessions are acceptable.
+      - low: Only weak or forced agreement; unresolved concerns remain.
+
+  revisit_triggers:
+    description: >
+      Derive revisit_triggers from dissenting views and acknowledged risks in Rounds 2-3.
+    rules:
+      - Each unresolved concern from Round 2 challenges becomes a revisit trigger.
+      - Each dissenting view recorded in Round 3 output becomes a revisit trigger.
+      - External assumption changes (e.g., scale, security requirements) are added as triggers.
+
+# ───────────────────────────────────────────────────────────────────────────────
+# USAGE
+# ───────────────────────────────────────────────────────────────────────────────
+
+usage:
+  when_to_use:
+    - Architecture decisions
+    - Significant trade-offs
+    - Multiple valid approaches
+    - Risk assessment needed
+    - Decision needs documented rationale
+
+  when_not_to_use:
+    - Simple, obvious choices
+    - Time-critical decisions
+    - Already established patterns
+    - Low-impact changes
+
+  example: |
+    ## Decision: How to implement caching
+
+    **Options:**
+    1. In-memory cache (simple, fast)
+    2. Redis (scalable, shared)
+    3. File-based (persistent, simple)
+
+    **Round 1 - Proposals:**
+
+    🏛️ Architect: I recommend Redis because it scales and can be shared...
+
+    🚀 Pragmatist: I recommend in-memory because it's simpler and we don't need scale yet...
+
+    🔍 Critic: I have concerns about in-memory (lost on restart) and Redis (new dependency)...
+
+    **Round 2 - Challenges:**
+
+    🏛️ to 🚀: In-memory won't work when we add a second server...
+    🚀 to 🏛️: We don't have a second server and may never need one...
+    🔍 to both: Neither handles cache invalidation properly...
+
+    **Round 3 - Convergence:**
+
+    Given priority of **quality**, we choose Redis with a fallback...

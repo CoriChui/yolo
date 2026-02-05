@@ -1,0 +1,390 @@
+# Trigger: Execution Failed
+# ═══════════════════════════════════════════════════════════════════════════════
+# React when execution stage fails or returns blocked/failed status
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: execution-failed
+description: Handle failed task execution with recovery attempts
+version: 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TRIGGER CONDITION
+# ───────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  event: stage.execute.complete
+  condition: "output.status in ['failed', 'blocked']"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CLASSIFICATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+classify:
+  rules:
+    - name: syntax_error
+      description: Code doesn't compile/parse
+      match:
+        - "output.notes.contains('syntax')"
+        - "output.notes.contains('parse error')"
+        - "output.notes.contains('SyntaxError')"
+        - "output.verification_result?.type_check?.exit_code != 0"
+
+    - name: type_error
+      description: TypeScript type errors
+      match:
+        - "output.notes.contains('type error')"
+        - "output.notes.contains('Type')"
+        - "output.notes.contains('TS')"
+
+    - name: runtime_error
+      description: Code fails at runtime
+      match:
+        - "output.notes.contains('runtime')"
+        - "output.notes.contains('undefined')"
+        - "output.notes.contains('null')"
+        - "output.notes.contains('Error:')"
+
+    - name: dependency_missing
+      description: Missing package or module
+      match:
+        - "output.notes.contains('Cannot find module')"
+        - "output.notes.contains('not found')"
+        - "output.blockers.any(b => b.contains('dependency'))"
+        - "output.blockers.any(b => b.contains('package'))"
+
+    - name: file_missing
+      description: Required file doesn't exist
+      match:
+        - "output.notes.contains('ENOENT')"
+        - "output.blockers.any(b => b.contains('file not found'))"
+        - "output.blockers.any(b => b.contains('does not exist'))"
+
+    - name: blocked_by_task
+      description: Depends on incomplete task
+      match:
+        - "output.blockers.any(b => b.contains('depends on'))"
+        - "output.blockers.any(b => b.contains('requires'))"
+
+    - name: unknown
+      description: Catch-all for unclassified execution failures
+      default: true
+
+# ───────────────────────────────────────────────────────────────────────────────
+# REACTIONS
+# ───────────────────────────────────────────────────────────────────────────────
+
+reactions:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Syntax/Type errors → Auto-fix
+  # ─────────────────────────────────────────────────────────────────────────────
+  syntax_error:
+    description: Fix syntax errors
+    max_retries: 3
+
+    action:
+      - name: extract_changed_files
+        description: Safely extract file paths from output
+        script: |
+          changed_files = (output.files_changed ?? []).map(f =>
+            typeof f === 'string' ? f : f.path ?? f.file ?? ''
+          ).filter(Boolean)
+
+      - name: spawn_fix_agent
+        agent: execute-fix
+        input:
+          task:
+            id: "fix-syntax-errors"
+            title: "Fix syntax errors"
+            description: |
+              Fix syntax errors in recent changes:
+
+              ${output.notes}
+            files: "${changed_files}"
+            verification: "Code compiles without syntax errors"
+          context: "${changed_files}"
+          previous_attempt:
+            error: "${output.notes}"
+            files_changed: "${changed_files}"
+
+      - name: retry_task
+        stage: execute
+        with_same_input: true
+
+    on_success:
+      - log: "Syntax error fix succeeded on attempt ${attempt}"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Syntax error fix failed after ${max_retries} attempts"
+      - escalate_to: blocked
+
+  type_error:
+    description: Fix type errors
+    max_retries: 3
+
+    action:
+      - name: extract_changed_files
+        description: Safely extract file paths from output
+        script: |
+          changed_files = (output.files_changed ?? []).map(f =>
+            typeof f === 'string' ? f : f.path ?? f.file ?? ''
+          ).filter(Boolean)
+
+      - name: spawn_fix_agent
+        agent: execute-fix
+        input:
+          task:
+            id: "fix-type-errors"
+            title: "Fix TypeScript type errors"
+            description: |
+              Fix type errors:
+
+              ${output.notes}
+
+              Remember:
+              - No 'any' types
+              - Use proper interfaces
+              - Handle null/undefined explicitly
+            files: "${changed_files}"
+            verification: "npx tsc --noEmit passes"
+          context: "${changed_files}"
+          previous_attempt:
+            error: "${output.notes}"
+            files_changed: "${changed_files}"
+
+      - name: retry_task
+        stage: execute
+        with_same_input: true
+
+    on_success:
+      - log: "Type error fix succeeded on attempt ${attempt}"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Type error fix failed after ${max_retries} attempts"
+      - escalate_to: blocked
+
+  runtime_error:
+    description: Fix runtime errors
+    max_retries: 2
+
+    action:
+      - name: extract_changed_files
+        description: Safely extract file paths from output
+        script: |
+          changed_files = (output.files_changed ?? []).map(f =>
+            typeof f === 'string' ? f : f.path ?? f.file ?? ''
+          ).filter(Boolean)
+
+      - name: spawn_fix_agent
+        agent: execute-fix
+        input:
+          task:
+            id: "fix-runtime-errors"
+            title: "Fix runtime errors"
+            description: |
+              Fix runtime errors:
+
+              ${output.notes}
+
+              Check for:
+              - Null/undefined access
+              - Missing error handling
+              - Incorrect assumptions
+            files: "${changed_files}"
+            verification: "No runtime errors when executed"
+          context: "${changed_files}"
+          previous_attempt:
+            error: "${output.notes}"
+            files_changed: "${changed_files}"
+
+      - name: retry_task
+        stage: execute
+        with_same_input: true
+
+    on_success:
+      - log: "Runtime error fix succeeded on attempt ${attempt}"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Runtime error fix failed after ${max_retries} attempts"
+      - escalate_to: blocked
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Missing dependency → Install and retry
+  # ─────────────────────────────────────────────────────────────────────────────
+  dependency_missing:
+    description: Install missing dependency
+    max_retries: 1
+
+    action:
+      - name: extract_package
+        description: Extract package name from error
+        script: |
+          # Parse error to find package name
+          error = "${output.notes}"
+          # Extract: Cannot find module 'X' → X
+          match = error.match(/Cannot find module ['"]([^'"]+)['"]/)
+          package = match ? match[1] : null
+
+      - name: install_package
+        if: "${package}"
+        command: "npm install ${package}"
+
+      - name: retry_task
+        if: "${install_success}"
+        stage: execute
+        with_same_input: true
+
+      - name: escalate
+        if: "${!package || !install_success}"
+        to: blocked
+        message: "Could not auto-install dependency"
+
+    on_success:
+      - log: "Dependency installed and task succeeded on retry"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Dependency resolution failed after ${max_retries} attempts"
+      - escalate_to: blocked
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # File missing → Check if it should exist
+  # ─────────────────────────────────────────────────────────────────────────────
+  file_missing:
+    description: Handle missing file
+
+    action:
+      - name: check_if_should_create
+        description: Determine if file should be created
+        script: |
+          # Check if file is in task.files
+          missing_file = "${output.blockers[0]}"
+          should_create = task.files.includes(missing_file)
+
+      - name: create_placeholder
+        if: "${should_create}"
+        description: Create the file first
+        agent: execute-standard
+        input:
+          task:
+            id: "create-missing-file"
+            title: "Create ${missing_file}"
+            description: "Create the missing file with appropriate structure"
+            files: ["${missing_file}"]
+            verification: "File exists"
+          context: ["${missing_file}"]
+
+      - name: retry_task
+        if: "${should_create}"
+        stage: execute
+        with_same_input: true
+
+      - name: escalate
+        if: "${!should_create}"
+        to: blocked
+        message: "Required file ${missing_file} doesn't exist and isn't in task scope"
+
+    on_success:
+      - log: "Missing file resolved and task succeeded on retry"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Missing file issue could not be resolved"
+      - escalate_to: blocked
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Blocked by another task → Reorder and retry
+  # ─────────────────────────────────────────────────────────────────────────────
+  blocked_by_task:
+    description: Task dependency issue
+
+    action:
+      - name: identify_blocker
+        script: |
+          # Find which task is blocking
+          blocker = "${output.blockers[0]}"
+          blocking_task_id = blocker.match(/depends on (\S+)/)?.[1]
+
+      - name: check_task_status
+        if: "${blocking_task_id}"
+        script: |
+          # Check if blocking task is complete
+          blocking_complete = execution_results
+            .find(r => r.task.id == blocking_task_id)
+            ?.status == 'completed'
+
+      - name: retry_task
+        if: "${blocking_complete}"
+        description: "Blocker is done, retry"
+        stage: execute
+        with_same_input: true
+
+      - name: reorder_and_pause
+        if: "${!blocking_complete}"
+        description: "Need to complete blocker first"
+        action:
+          - update_execution_order: "Move ${blocking_task_id} before current task"
+          - notify: "Reordering tasks to handle dependency"
+          - restart_execution_loop: true
+
+    on_success:
+      - log: "Task dependency resolved and task succeeded"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Task dependency could not be resolved"
+      - escalate_to: blocked
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Unknown → Escalate
+  # ─────────────────────────────────────────────────────────────────────────────
+  unknown:
+    description: Unclassified execution failure - escalate for review
+    max_retries: 1
+
+    action:
+      - name: log
+        message: "Unclassified execution failure - escalating"
+
+      - name: escalate
+        to: blocked
+        message: |
+          Execution failed with unclassified error:
+          ${output.notes}
+
+    on_success:
+      - log: "Unknown execution issue resolved"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Unknown execution issue could not be resolved"
+      - escalate_to: blocked
+
+# ───────────────────────────────────────────────────────────────────────────────
+# ROLLBACK SUPPORT
+# ───────────────────────────────────────────────────────────────────────────────
+
+rollback:
+  description: Revert files changed by failed task to pre-execution state
+  trigger: "all reactions.*.on_failure"
+
+  action:
+    - name: get_rollback_sha
+      description: Get the checkpoint SHA for this task
+      script: |
+        rollback_sha = context.task_checkpoints?.[context.task.id]
+
+    - name: rollback_files
+      if: "${rollback_sha}"
+      command: |
+        CHANGED=$(git diff --name-only ${rollback_sha} HEAD)
+        if [ -n "$CHANGED" ]; then
+          git checkout ${rollback_sha} -- $CHANGED
+          git commit -m "revert: rollback failed task ${context.task.id}"
+        fi
+
+    - name: log_rollback
+      if: "${rollback_sha}"
+      message: "Rolled back task ${context.task.id} to ${rollback_sha}"

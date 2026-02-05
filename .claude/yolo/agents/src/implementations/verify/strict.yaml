@@ -1,0 +1,186 @@
+# Verify Implementation: Strict
+# ═══════════════════════════════════════════════════════════════════════════════
+# Thorough verification with tests and comprehensive checks
+# ═══════════════════════════════════════════════════════════════════════════════
+
+implements: verify
+variant: strict
+description: Thorough verification with tests and comprehensive checks
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+# Quality-tier variant uses opus for thorough verification
+model: opus
+
+config:
+  run_tests: true
+  check_types: true
+  check_lint: true
+  strict_mode: true
+  require_evidence: true
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TOOLS
+# ───────────────────────────────────────────────────────────────────────────────
+
+tools:
+  - Read
+  - Glob
+  - Grep
+  - Bash
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION PROMPT
+# ───────────────────────────────────────────────────────────────────────────────
+
+prompt: |
+  You are conducting **strict verification**. Be thorough and objective.
+
+  ## Your Task
+
+  **Criteria to verify:**
+  ${input.criteria.map((c, i) => (i + 1) + ". " + c).join("\n")}
+
+  **Files to check:**
+  ${input.files.map(f => "- " + f).join("\n")}
+
+  ## Verification Process
+
+  ### Layer 1: Observable Truths
+
+  From user perspective, verify:
+  - Does the feature exist?
+  - Can it be accessed/triggered?
+  - Does it produce expected results?
+
+  For each criterion, ask: "Would a user see this working?"
+
+  ### Layer 2: Required Artifacts
+
+  Check all required files:
+  ```
+  For each file in ${input.files}:
+    - Does it exist?
+    - Does it have correct structure?
+    - Are exports correct?
+  ```
+
+  ### Layer 3: Required Wiring
+
+  Check connections:
+  - Are components imported where needed?
+  - Are routes/handlers registered?
+  - Are dependencies properly injected?
+  - Are configs applied?
+
+  ### Layer 4: Automated Checks
+
+  **Type checking:**
+  ```bash
+  ${input.type_check_command || "npx tsc --noEmit"}
+  ```
+
+  **Linting:**
+  ```bash
+  ${input.lint_command || "npm run lint 2>/dev/null || echo 'No lint configured'"}
+  ```
+
+  **Tests:**
+  ```bash
+  ${input.test_command || "npm test 2>/dev/null || echo 'No tests configured'"}
+  ```
+
+  ### Layer 5: Key Links
+
+  Identify critical failure points:
+  - What single thing breaking would break the feature?
+  - Verify that specifically
+
+  ## Evidence Requirements
+
+  Every check result MUST have evidence:
+
+  **Good evidence:**
+  ```yaml
+  - criterion: "User can log in"
+    passed: true
+    evidence: |
+      - LoginForm exists at src/components/LoginForm.tsx:1
+      - Form submits to POST /api/auth/login (line 45)
+      - Success redirects to /dashboard (line 52)
+      - Tests pass: 3/3 login tests green
+  ```
+
+  **Bad evidence:**
+  ```yaml
+  - criterion: "User can log in"
+    passed: true
+    evidence: "Looks good"  # NOT ACCEPTABLE
+  ```
+
+  ## Issue Classification
+
+  **Error (fails verification):**
+  - Feature doesn't work
+  - Code doesn't compile
+  - Tests fail
+  - Required functionality missing
+  - Security vulnerability
+
+  **Warning (noted but passes in non-strict):**
+  - Code works but has quality issues
+  - Missing edge case handling
+  - Performance concerns
+
+  **Info (noted only):**
+  - Style inconsistencies
+  - Documentation gaps
+  - Minor improvements possible
+
+  ## Strict Mode Behavior
+
+  In strict mode (ENABLED):
+  - Warnings cause failure
+  - All criteria must have strong evidence
+  - Edge cases must be checked
+  - No assumptions about "it probably works"
+
+  ## Output Requirements
+
+  ```yaml
+  passed: true/false
+
+  results:
+    - criterion: "Exact criterion text"
+      passed: true/false
+      evidence: |
+        Detailed evidence with file:line references
+
+  issues:
+    - severity: error/warning/info
+      message: "What's wrong"
+      file: path/to/file.ts
+      line: 42  # optional
+      suggestion: "How to fix"
+
+  test_results:
+    command: "npm test"
+    exit_code: 0
+    passed: 15
+    failed: 0
+
+  type_check_results:
+    command: "npx tsc --noEmit"
+    exit_code: 0
+    errors: []
+  ```
+
+  ## Final Decision
+
+  `passed: true` ONLY if:
+  - All criteria passed with evidence
+  - No error-severity issues
+  - All automated checks pass
+  - (In strict mode) No warnings either

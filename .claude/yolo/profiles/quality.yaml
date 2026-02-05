@@ -1,0 +1,95 @@
+# Profile: Quality
+# ═══════════════════════════════════════════════════════════════════════════════
+# Maximum quality, autonomous execution
+# Best for: Complex features, production-critical work
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: quality
+description: Maximum quality with thorough research and strict verification
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION SELECTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+implementations:
+  research: thorough      # Deep exploration, external docs
+  plan: detailed          # Full coverage matrix, risks
+  execute: standard       # fix variant used automatically by triggers on verification failure
+  verify: strict          # Tests, types, lint
+  decide: conversation    # Multi-perspective debate
+
+# ───────────────────────────────────────────────────────────────────────────────
+# MODEL OVERRIDES (optional)
+# ───────────────────────────────────────────────────────────────────────────────
+
+models:
+  research: opus
+  plan: opus
+  execute: sonnet
+  verify: opus
+  decide: opus
+
+# ───────────────────────────────────────────────────────────────────────────────
+# BEHAVIOR
+# ───────────────────────────────────────────────────────────────────────────────
+
+behavior:
+  # Research settings
+  research:
+    depth: deep
+    include_external: true
+    max_files: 50
+    follow_imports: true
+
+  # Planning settings
+  plan:
+    max_tasks: 5
+    require_coverage: true
+    include_risks: true
+
+  # Verification settings
+  verify:
+    run_tests: true
+    check_types: true
+    check_lint: true
+    strict_mode: true
+
+  # Error handling
+  errors:
+    max_retries: 3
+    on_failure: pause_and_report
+
+# ───────────────────────────────────────────────────────────────────────────────
+# INTERACTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+interaction:
+  mode: autonomous
+  ask_on_ambiguity: false  # Quality profile relies on decide-conversation agent to resolve ambiguity autonomously
+  ask_on_design_decision: true  # For decide agent
+
+# ───────────────────────────────────────────────────────────────────────────────
+# COST/PERFORMANCE
+# ───────────────────────────────────────────────────────────────────────────────
+
+estimates:
+  tokens_per_feature: 40000-60000
+  cost_per_feature: $0.40-0.60
+  relative_speed: slow
+
+# ───────────────────────────────────────────────────────────────────────────────
+# USE WHEN
+# ───────────────────────────────────────────────────────────────────────────────
+
+recommended_for:
+  - Production-critical features
+  - Complex architectural changes
+  - Features with security implications
+  - When thorough documentation is needed
+  - Unfamiliar codebases
+
+not_recommended_for:
+  - Quick fixes
+  - Simple tasks
+  - Rapid prototyping
+  - Budget-constrained work

@@ -1,0 +1,273 @@
+# Agent Sync Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+# Configuration for /yolo:sync-agents command
+# Generates agents from baselines + contracts + implementations
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# SOURCE LOCATIONS
+# ───────────────────────────────────────────────────────────────────────────────
+
+sources:
+  baselines: src/baselines/
+  contracts: src/contracts/
+  implementations: src/implementations/
+
+# ───────────────────────────────────────────────────────────────────────────────
+# OUTPUT LOCATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+output: generated/
+
+# ───────────────────────────────────────────────────────────────────────────────
+# GENERATION RULES
+# ───────────────────────────────────────────────────────────────────────────────
+
+generate:
+  # Generate one agent per implementation file
+  for_each: implementation
+
+  # Output naming
+  naming: "{{contract}}-{{variant}}.md"
+
+  # Generation steps
+  steps:
+    # 1. Load source files
+    - load_baseline: "src/baselines/{{contract}}.md"
+    - load_contract: "src/contracts/{{contract}}.yaml"
+    - load_implementation: "src/implementations/{{contract}}/{{variant}}.yaml"
+
+    # 2. Compute hash for change detection
+    - compute_hash:
+        algorithm: sha256
+        inputs:
+          - baseline
+          - contract
+          - implementation
+
+    # 3. Replace placeholders
+    - replace:
+        "{{VARIANT}}": implementation.variant
+        "{{DESCRIPTION}}": implementation.description
+        "{{MODEL}}": implementation.model
+        "{{TOOLS}}": |
+          Resolve tools from:
+          - contract.tools.base (always)
+          - contract.tools.external (if implementation.config.include_external)
+          - contract.tools.interactive (if implementation.config.interactive)
+        "{{MAX_FILES}}": implementation.config.max_files || 20
+        "{{MAX_TASKS}}": implementation.config.max_tasks || 5
+        "{{INPUT_SCHEMA}}": format_schema(contract.input)
+        "{{OUTPUT_SCHEMA}}": format_schema(contract.output)
+        "{{IMPLEMENTATION_PROMPT}}": |
+          <implementation>
+          ${implementation.prompt}
+          </implementation>
+        "{{INTERACTIVE_SECTION}}": |
+          if implementation.config.interactive:
+            <interactive>
+            ${implementation.interactive_section}
+            </interactive>
+          else:
+            ""
+        "{{PERSPECTIVES}}": |
+          if implementation.perspectives:
+            format_perspectives(implementation.perspectives)
+          else:
+            ""
+        "{{ROUNDS}}": implementation.config.rounds || 3
+        "{{RUN_TESTS}}": implementation.config.run_tests || true
+        "{{CHECK_TYPES}}": implementation.config.check_types || true
+        "{{CHECK_LINT}}": implementation.config.check_lint || false
+
+    # 4. Prepend generated header
+    - prepend_header:
+        template: |
+          # {{contract}}-{{variant}}
+          # ═══════════════════════════════════════════════════════════════════════════════
+          # GENERATED — Do not edit directly. Run /yolo:sync-agents to regenerate.
+          # ═══════════════════════════════════════════════════════════════════════════════
+          # Hash: {{hash}}
+          # Generated: {{timestamp}}
+          # Sources:
+          #   {{baseline_path}} ({{baseline_hash}})
+          #   {{contract_path}} ({{contract_hash}})
+          #   {{implementation_path}} ({{implementation_hash}})
+          # ═══════════════════════════════════════════════════════════════════════════════
+
+    # 5. Write output
+    - write: "generated/{{contract}}-{{variant}}.md"
+
+    # 6. Log result
+    - log: "Generated {{contract}}-{{variant}}.md"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# SCHEMA FORMATTING
+# ───────────────────────────────────────────────────────────────────────────────
+
+format_schema:
+  # How to format input/output schemas for display in agent prompts
+  style: markdown_list
+
+  template: |
+    **Required:**
+    {{#each required}}
+    - `{{name}}` ({{type}}): {{description}}
+    {{/each}}
+
+    {{#if optional}}
+    **Optional:**
+    {{#each optional}}
+    - `{{name}}` ({{type}}): {{description}}{{#if default}} (default: {{default}}){{/if}}
+    {{/each}}
+    {{/if}}
+
+# ───────────────────────────────────────────────────────────────────────────────
+# VALIDATION RULES
+# ───────────────────────────────────────────────────────────────────────────────
+
+validate:
+  # Run these checks after generation
+  checks:
+    - name: placeholders_replaced
+      description: All {{...}} placeholders must be replaced
+      pattern: "\\{\\{[A-Z_]+\\}\\}"
+      expect: 0 matches
+      severity: error
+
+    - name: schema_match
+      description: Agent input/output must match contract
+      compare:
+        - agent.input_schema == contract.input
+        - agent.output_schema == contract.output
+      severity: error
+
+    - name: tools_valid
+      description: All tools must be in allowed list
+      allowed:
+        - Read
+        - Write
+        - Edit
+        - Glob
+        - Grep
+        - Bash
+        - WebSearch
+        - WebFetch
+        - AskUserQuestion
+      severity: error
+
+    - name: model_valid
+      description: Model must be valid Claude model
+      allowed:
+        - opus
+        - sonnet
+        - haiku
+      severity: error
+
+    - name: sections_complete
+      description: Required sections must be present
+      required:
+        - role
+        - contract
+        - constraints
+        - output_format
+      severity: error
+
+    - name: size_limit
+      description: Agent should fit in context comfortably
+      max_tokens: 4000
+      warn_at: 3000
+      severity: warning
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CHANGE DETECTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+change_detection:
+  # How to detect if regeneration is needed
+  method: hash_comparison
+
+  # Compare current source hashes to stored hashes in generated files
+  compare:
+    - baseline_hash
+    - contract_hash
+    - implementation_hash
+
+  # Status values
+  statuses:
+    up_to_date: "All hashes match"
+    stale: "Source changed since generation"
+    modified: "Generated file was manually edited"
+    orphan: "No matching sources found"
+    missing: "Expected agent not generated"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# WATCH MODE
+# ───────────────────────────────────────────────────────────────────────────────
+
+watch:
+  # Files to watch for changes
+  patterns:
+    - src/baselines/**/*.md
+    - src/contracts/**/*.yaml
+    - src/implementations/**/*.yaml
+
+  # What to do on change
+  on_change:
+    - detect_affected_agents
+    - regenerate_affected
+    - validate
+
+# ───────────────────────────────────────────────────────────────────────────────
+# COMMAND OPTIONS
+# ───────────────────────────────────────────────────────────────────────────────
+
+commands:
+  check:
+    description: Show status without regenerating
+    output:
+      - agent_name
+      - status (up_to_date | stale | modified | orphan)
+      - last_generated
+      - source_changed_at
+
+  sync:
+    description: Regenerate stale agents
+    steps:
+      - detect_changes
+      - regenerate_stale
+      - validate
+      - report
+
+  validate:
+    description: Validate all generated agents
+    steps:
+      - load_all_generated
+      - run_all_checks
+      - report_issues
+
+  force:
+    description: Regenerate all agents regardless of status
+    steps:
+      - regenerate_all
+      - validate
+      - report
+
+# ───────────────────────────────────────────────────────────────────────────────
+# EXPECTED AGENTS
+# ───────────────────────────────────────────────────────────────────────────────
+
+# List of agents that should exist after sync
+expected:
+  - research-thorough
+  - research-quick
+  - research-interactive
+  - plan-detailed
+  - plan-minimal
+  - execute-standard
+  - execute-fix
+  - verify-strict
+  - verify-basic
+  - decide-conversation

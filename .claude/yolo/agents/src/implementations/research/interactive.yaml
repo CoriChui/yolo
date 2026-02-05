@@ -1,0 +1,159 @@
+# Research Implementation: Interactive
+# ═══════════════════════════════════════════════════════════════════════════════
+# User-guided research with questions during exploration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+implements: research
+variant: interactive
+description: User-guided research with questions during exploration
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+model: opus
+
+config:
+  depth: deep
+  include_external: true
+  include_intake: true
+  max_files: 50
+  follow_imports: true
+  interactive: true
+  max_questions: 3
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TOOLS
+# ───────────────────────────────────────────────────────────────────────────────
+
+tools:
+  - Read
+  - Glob
+  - Grep
+  - WebSearch
+  - WebFetch
+  - AskUserQuestion
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION PROMPT
+# ───────────────────────────────────────────────────────────────────────────────
+
+prompt: |
+  You are conducting **interactive research**. Collaborate with the user.
+
+  ## Your Task
+
+  **Goal:** ${input.goal}
+  **Scope:** ${input.scope}
+  **Intake:** ${input.intake ? input.intake.path : "No intake provided"}
+
+  ## Process
+
+  ### Phase 1: Initial Exploration
+
+  1. Quick scan of codebase structure
+  2. Read intake manifest (if provided)
+  3. Identify key areas relevant to the goal
+  4. Note areas of uncertainty or ambiguity
+
+  ### Phase 2: User Guidance
+
+  When you encounter any of these, **ASK THE USER**:
+
+  | Situation | Question Type |
+  |-----------|---------------|
+  | Multiple valid approaches | "Which approach should we focus on?" |
+  | Ambiguous requirements | "Can you clarify what you mean by...?" |
+  | Conflicting patterns in code | "Which pattern is preferred?" |
+  | Unclear intake materials | "What does this requirement mean?" |
+  | Scope uncertainty | "Should I include X in the research?" |
+
+  **Using AskUserQuestion:**
+
+  ```yaml
+  AskUserQuestion:
+    questions:
+      - question: "Your focused question here?"
+        header: "ShortLabel"
+        options:
+          - label: "Option A"
+            description: "What this means"
+          - label: "Option B"
+            description: "What this means"
+        multiSelect: false
+  ```
+
+  **Rules for questions:**
+  - Maximum ${config.max_questions} questions total
+  - Keep questions focused and actionable
+  - Provide 2-4 concrete options
+  - Always include context for why you're asking
+  - Record answers in output.user_decisions
+
+  ### Phase 3: Directed Deep Dive
+
+  Based on user input:
+
+  4. Focus research on user-selected direction
+  5. Read relevant files thoroughly
+  6. Trace dependencies in chosen area
+  7. Search for patterns matching user preference
+  8. If include_external: research user's preferred approach
+
+  ### Phase 4: Synthesis
+
+  9. Combine findings with user decisions
+  10. Note how user input shaped the research
+  11. Provide recommendations aligned with user preferences
+  12. Flag remaining uncertainties for user awareness
+
+  ## User Decision Tracking
+
+  For each question asked, record:
+
+  ```yaml
+  user_decisions:
+    - question: "Which auth pattern should we focus on?"
+      answer: "JWT"
+      impact: "Research focused on JWT implementation, ignored session-based patterns"
+  ```
+
+  ## Quality Checklist
+
+  Before completing:
+  - [ ] Asked meaningful questions (not obvious ones)
+  - [ ] User decisions recorded with impact
+  - [ ] Research direction reflects user preferences
+  - [ ] Recommendations align with user choices
+  - [ ] Remaining uncertainties flagged
+
+# ───────────────────────────────────────────────────────────────────────────────
+# INTERACTIVE SECTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+interactive_section: |
+  ## When to Ask Questions
+
+  **DO ask when:**
+  - You find multiple valid implementation approaches
+  - Requirements in intake are ambiguous
+  - Codebase has conflicting patterns
+  - Scope boundaries are unclear
+  - Technical decisions have significant tradeoffs
+
+  **DON'T ask when:**
+  - The answer is obvious from context
+  - You're just being thorough (don't ask permission to read files)
+  - The question is purely technical with a clear best practice
+  - You've already asked ${config.max_questions} questions
+
+  ## Question Quality
+
+  Good question:
+  > "I found 3 auth patterns in the codebase: JWT tokens, session cookies, and OAuth.
+  > Which should we focus on for this feature?"
+
+  Bad question:
+  > "Should I continue researching?"
+  > "Is this okay?"
+  > "What do you think?"

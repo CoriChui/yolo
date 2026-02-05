@@ -1,0 +1,73 @@
+# Ad-hoc Tasks Template
+#
+# Central tracking file for /do tasks.
+# Location: .planning/do/DO.yaml
+# ─────────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════
+# STATUS LIFECYCLE
+# ═══════════════════════════════════════════════════════════════
+#
+# pending → in_progress → completed
+#                      ↘ cancelled
+#                      ↘ blocked → in_progress
+#
+# Status values:
+#   pending      - Created, not yet started
+#   in_progress  - Actively working on tasks
+#   blocked      - Waiting on external input/dependency
+#   completed    - All tasks done, summary created
+#   cancelled    - Abandoned (reason documented)
+
+# ═══════════════════════════════════════════════════════════════
+# ACTIVE TASKS
+# ═══════════════════════════════════════════════════════════════
+
+# Tasks currently being worked on
+active: []
+# Example:
+#   - id: "003"
+#     description: "Add rate limiting"
+#     started: "2026-02-03"
+#     status: in_progress        # pending | in_progress | blocked
+#     progress:
+#       completed: 2
+#       total: 3
+#     directory: "003-add-rate-limiting"
+
+# ═══════════════════════════════════════════════════════════════
+# COMPLETED TASKS
+# ═══════════════════════════════════════════════════════════════
+
+# Successfully finished tasks
+completed: []
+# Example:
+#   - id: "001"
+#     description: "Setup logging"
+#     completed: "2026-02-01"
+#     commits: 2
+#     duration: "1h"
+#     directory: "001-setup-logging"
+
+# ═══════════════════════════════════════════════════════════════
+# CANCELLED TASKS
+# ═══════════════════════════════════════════════════════════════
+
+# Abandoned tasks (kept for history)
+cancelled: []
+# Example:
+#   - id: "002"
+#     description: "Add caching"
+#     cancelled: "2026-02-02"
+#     reason: "Decided to use CDN instead"
+#     directory: "002-add-caching"
+
+# ═══════════════════════════════════════════════════════════════
+# STATISTICS
+# ═══════════════════════════════════════════════════════════════
+
+stats:
+  total_completed: 0
+  total_cancelled: 0
+  average_duration: null        # e.g., "2h"
+  this_week: 0

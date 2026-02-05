@@ -1,0 +1,68 @@
+# Debug Sessions Template
+#
+# Central tracking file for /debug sessions.
+# Location: .planning/debug/DEBUG.yaml
+# ─────────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════
+# STATUS LIFECYCLE
+# ═══════════════════════════════════════════════════════════════
+#
+# gathering → investigating → fixing → verifying → resolved
+#                                               ↘ abandoned
+#
+# Status values:
+#   gathering     - Collecting symptoms and initial info
+#   investigating - Testing hypotheses
+#   fixing        - Root cause found, applying fix
+#   verifying     - Testing the fix
+#   resolved      - Issue fixed and verified
+#   abandoned     - Given up (reason documented)
+
+# ═══════════════════════════════════════════════════════════════
+# ACTIVE SESSIONS
+# ═══════════════════════════════════════════════════════════════
+
+active: []
+# Example:
+#   - id: "auth-token-expired"
+#     issue: "Token expires too fast"
+#     status: investigating       # gathering | investigating | fixing | verifying
+#     hypothesis: "Redis TTL config"
+#     started: "2026-02-03"
+#     directory: "auth-token-expired"
+
+# ═══════════════════════════════════════════════════════════════
+# RESOLVED SESSIONS
+# ═══════════════════════════════════════════════════════════════
+
+resolved: []
+# Example:
+#   - id: "login-crash"
+#     issue: "App crashes on login"
+#     root_cause: "Null user object"
+#     resolved: "2026-02-02"
+#     duration: "2h"
+#     directory: "resolved/login-crash"
+
+# ═══════════════════════════════════════════════════════════════
+# ABANDONED SESSIONS
+# ═══════════════════════════════════════════════════════════════
+
+abandoned: []
+# Example:
+#   - id: "random-timeout"
+#     issue: "Random API timeouts"
+#     reason: "Cannot reproduce consistently"
+#     abandoned: "2026-02-03"
+#     directory: "abandoned/random-timeout"
+
+# ═══════════════════════════════════════════════════════════════
+# STATISTICS
+# ═══════════════════════════════════════════════════════════════
+
+stats:
+  total_resolved: 0
+  total_abandoned: 0
+  average_resolution_time: null   # e.g., "3h"
+  this_week: 0

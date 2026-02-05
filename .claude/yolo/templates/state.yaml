@@ -1,0 +1,163 @@
+# STATE.yaml Template
+#
+# Single source of project state. Read first in every workflow.
+# Tracks all active releases and current focus.
+# Location: .planning/state.yaml
+# ─────────────────────────────────────────────────────────────────
+
+# Schema version
+schema_version: 2
+
+# Last update metadata
+updated_at: null                    # ISO 8601 datetime
+updated_by: null                    # Which workflow updated (e.g., feature-complete)
+
+# Lock (prevents concurrent modifications)
+lock:
+  held_by: null
+  acquired_at: null
+  expires_at: null
+
+_checksum: null
+# Backup: .planning/state.yaml.bak (auto-created before each write)
+# Recovery: /init --recover (restores from backup or rebuilds from filesystem)
+
+# ═══════════════════════════════════════════════════════════════
+# FOCUS (what we're working on now)
+# ═══════════════════════════════════════════════════════════════
+
+focus:
+  release: null                     # Currently focused release ID
+                                    # Commands use this release by default
+
+  feature: null                     # Currently active feature ID
+  feature_release: null             # Feature's release (null if standalone)
+
+# ═══════════════════════════════════════════════════════════════
+# RELEASES (all active/pending)
+# ═══════════════════════════════════════════════════════════════
+
+releases: []
+# Example:
+#   - id: "2026-02-04-mvp"
+#     slug: "mvp"
+#     status: active                # pending | active | paused | completed | failed | cancelled
+#     created: 2026-02-04T10:00:00Z
+#     started_at: 2026-02-04T14:00:00Z
+#     intake:
+#       current: "mvp-v1.1"
+#       locked: false
+#     progress:
+#       features_total: 4
+#       features_completed: 2
+#       percentage: 50
+#
+#   - id: "2026-02-10-mobile"
+#     slug: "mobile"
+#     status: pending
+#     created: 2026-02-10T09:00:00Z
+#     started_at: null
+#     intake:
+#       current: "mobile-v1"
+#       locked: false
+#     progress:
+#       features_total: 0
+#       features_completed: 0
+#       percentage: 0
+
+# ═══════════════════════════════════════════════════════════════
+# STANDALONE FEATURES
+# ═══════════════════════════════════════════════════════════════
+
+standalone_features:
+  total: 0
+  active: 0
+  list: []
+  # Example:
+  #   - id: "dark-mode"
+  #     status: pending
+  #   - id: "export-csv"
+  #     status: in_progress
+
+# ═══════════════════════════════════════════════════════════════
+# CURRENT FEATURE (detailed)
+# ═══════════════════════════════════════════════════════════════
+
+feature:
+  id: null                          # Current feature ID
+  release: null                     # Feature's release (null if standalone)
+  status: null                      # pending | researching | planning | in_progress | blocked | verifying | completed | dropped
+
+  tasks:
+    total: 0
+    completed: 0
+    current: null                   # Current task description
+
+  started_at: null                  # ISO 8601 datetime
+
+# ═══════════════════════════════════════════════════════════════
+# SESSION
+# ═══════════════════════════════════════════════════════════════
+
+session:
+  last_activity: null               # ISO 8601 datetime
+  last_action: null                 # Description of last action
+
+  last_error:
+    at: null
+    workflow: null
+    message: null
+    recoverable: null
+    recovery_hint: null
+
+  # For context restoration
+  resume:
+    context: null                   # Brief context for session resumption
+    # Example:
+    #   context: |
+    #     Working on Feature 03: Billing in release 2026-02-04-mvp.
+    #     Completed billing service setup.
+    #     Next task: implement payment acceptance.
+    #
+    #     Other active releases:
+    #     - 2026-02-10-mobile (pending, not started)
+
+# ═══════════════════════════════════════════════════════════════
+# METRICS (Optional)
+# ═══════════════════════════════════════════════════════════════
+
+metrics:
+  releases_completed: 0
+  features_completed: 0
+  total_tasks_completed: 0
+
+# ─────────────────────────────────────────────────────────────────
+# TEMPLATE NOTES
+# ─────────────────────────────────────────────────────────────────
+#
+# Schema Version 2 Changes:
+# - Added focus section (release + feature)
+# - releases is now an array (supports parallel releases)
+# - Added standalone_features section
+# - Intake is tracked per-release, not globally
+#
+# Focus Behavior:
+# - Creating a release sets it as focused
+# - Starting a feature sets it as current
+# - Use /release focus <id> to change focus manually
+#
+# Commands use focused release by default:
+# - /release start → starts focused release
+# - /intake capture → captures to focused release
+# - /feature start 01 → creates feature in focused release
+# - Override with --release flag
+#
+# This file is:
+# - Read first in every workflow
+# - Updated after every significant action
+# - Kept concise (digest, not archive)
+#
+# Lifecycle:
+# - Created: After /init
+# - Updated: After release/feature/intake actions
+# - Read: By all workflows for current context

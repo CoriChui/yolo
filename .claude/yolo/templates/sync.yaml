@@ -1,0 +1,85 @@
+# External Sync Template
+#
+# Central tracking file for external issue tracker integration.
+# Location: .planning/sync/sync.yaml
+# ─────────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════
+# CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+
+config:
+  tracker: null # github | gitlab | linear | jira
+  repository: null # e.g., "owner/repo"
+  auto_refresh: on-pull # on-pull | manual | scheduled
+  last_sync: null # ISO 8601 datetime
+
+# ═══════════════════════════════════════════════════════════════
+# LINKED ITEMS
+# ═══════════════════════════════════════════════════════════════
+
+# Items imported and linked to YOLO items
+linked: []
+# Example:
+#   - external: "GH#123"
+#     type: bug
+#     title: "Login crash"
+#     yolo_item: "do/005-login-crash"
+#     yolo_status: completed
+#     tracker_status: closed
+#     last_sync: "2026-02-03"
+#
+#   - external: "GH#124"
+#     type: feature
+#     title: "Billing"
+#     yolo_item: "releases/2026-02-04-mvp/features/03-billing"  # Release feature path
+#     yolo_status: in_progress
+#     tracker_status: open
+#     last_sync: "2026-02-03"
+#
+#   - external: "GH#126"
+#     type: feature
+#     title: "Dark Mode"
+#     yolo_item: "features/dark-mode"                           # Standalone feature path
+#     yolo_status: in_progress
+#     tracker_status: open
+#     last_sync: "2026-02-03"
+
+# ═══════════════════════════════════════════════════════════════
+# PENDING IMPORT
+# ═══════════════════════════════════════════════════════════════
+
+# Issues fetched but not yet imported
+pending: []
+# Example:
+#   - external: "GH#125"
+#     type: bug
+#     title: "API timeout"
+#     labels:
+#       - bug
+#       - api
+#     suggested: do               # do | feature | release
+#     url: "https://github.com/owner/repo/issues/125"
+
+# ═══════════════════════════════════════════════════════════════
+# DRIFT DETECTED
+# ═══════════════════════════════════════════════════════════════
+
+# Items where tracker status differs from YOLO
+drift: []
+# Example:
+#   - external: "GH#130"
+#     yolo_item: "/do/007"
+#     yolo_status: in_progress
+#     tracker_status: closed
+#     detected: "2026-02-03"
+
+# ═══════════════════════════════════════════════════════════════
+# STATISTICS
+# ═══════════════════════════════════════════════════════════════
+
+stats:
+  total_linked: 0
+  pending_import: 0
+  drift_detected: 0
+  last_full_sync: null # ISO 8601 datetime

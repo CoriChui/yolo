@@ -1,0 +1,95 @@
+# Profile: Balanced
+# ═══════════════════════════════════════════════════════════════════════════════
+# Good quality with reasonable cost — DEFAULT PROFILE
+# Best for: Most features, everyday development
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: balanced
+description: Good quality with reasonable cost — the default choice
+
+default: true
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION SELECTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+implementations:
+  research: thorough      # Still thorough — research is important
+  plan: detailed          # Full planning
+  execute: standard       # fix variant used automatically by triggers on verification failure
+  verify: strict           # Tests, types, lint — true middle ground
+  decide: conversation    # Keep quality decisions
+
+# ───────────────────────────────────────────────────────────────────────────────
+# MODEL OVERRIDES (optional)
+# ───────────────────────────────────────────────────────────────────────────────
+
+models:
+  research: sonnet
+  plan: sonnet
+  execute: sonnet
+  verify: sonnet           # Balanced verification
+  decide: opus
+
+# ───────────────────────────────────────────────────────────────────────────────
+# BEHAVIOR
+# ───────────────────────────────────────────────────────────────────────────────
+
+behavior:
+  # Research settings
+  research:
+    depth: deep
+    include_external: true
+    max_files: 40
+    follow_imports: true
+
+  # Planning settings
+  plan:
+    max_tasks: 5
+    require_coverage: true
+    include_risks: true
+
+  # Verification settings
+  verify:
+    run_tests: true       # Enabled for balanced verification
+    check_types: true     # Types are fast and valuable
+    check_lint: false     # Skip lint
+    strict_mode: false
+
+  # Error handling
+  errors:
+    max_retries: 2
+    on_failure: pause_and_report
+
+# ───────────────────────────────────────────────────────────────────────────────
+# INTERACTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+interaction:
+  mode: autonomous
+  ask_on_ambiguity: false
+  ask_on_design_decision: true
+
+# ───────────────────────────────────────────────────────────────────────────────
+# COST/PERFORMANCE
+# ───────────────────────────────────────────────────────────────────────────────
+
+estimates:
+  tokens_per_feature: 25000-40000
+  cost_per_feature: $0.25-0.40
+  relative_speed: moderate
+
+# ───────────────────────────────────────────────────────────────────────────────
+# USE WHEN
+# ───────────────────────────────────────────────────────────────────────────────
+
+recommended_for:
+  - Most feature development
+  - Standard bug fixes
+  - Everyday coding tasks
+  - When you want quality without overthinking
+
+not_recommended_for:
+  - Ultra-quick tasks (use budget)
+  - Critical production changes (use quality)
+  - When you need user guidance (use guided)

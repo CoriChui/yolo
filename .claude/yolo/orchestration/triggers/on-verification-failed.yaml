@@ -1,0 +1,215 @@
+# Trigger: Verification Failed
+# ═══════════════════════════════════════════════════════════════════════════════
+# React when verification stage fails
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: verification-failed
+description: Handle failed verification with automatic recovery attempts
+version: 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TRIGGER CONDITION
+# ───────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  event: stage.verify.complete
+  condition: "output.passed == false"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CLASSIFICATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+classify:
+  # Analyze verification output to determine issue type
+  rules:
+    - name: fixable
+      description: Code issues that can be auto-corrected
+      match:
+        - "output.issues.any(i => i.severity == 'error' && (i.suggestion || i.fixable))"
+        - "output.test_results?.failed > 0"
+        - "output.type_check_results?.errors.length > 0"
+
+    - name: blocked
+      description: Missing requirements or external dependencies
+      match:
+        - "output.issues.any(i => i.message.contains('missing dependency'))"
+        - "output.issues.any(i => i.message.contains('requires'))"
+        - "output.issues.any(i => i.message.contains('not found'))"
+
+    - name: design
+      description: Fundamental approach problem
+      match:
+        - "output.issues.any(i => i.message.contains('architecture'))"
+        - "output.issues.any(i => i.message.contains('pattern'))"
+        - "output.results.filter(r => !r.passed).length > 2"
+
+    - name: unknown
+      description: Catch-all for unclassified verification failures
+      default: true
+
+# ───────────────────────────────────────────────────────────────────────────────
+# REACTIONS
+# ───────────────────────────────────────────────────────────────────────────────
+
+reactions:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Fixable issues → Auto-fix
+  # ─────────────────────────────────────────────────────────────────────────────
+  fixable:
+    description: Attempt automatic fix
+    max_retries: 2
+
+    action:
+      - name: spawn_fix_agent
+        agent: execute-fix
+        input:
+          task:
+            id: "fix-verification-${FEATURE_ID}-attempt-${attempt}"
+            title: "Fix verification issues"
+            description: |
+              Fix these issues from verification:
+
+              ${output.issues.filter(i => i.severity == 'error').map(i =>
+                '- ' + i.message + ' in ' + i.file + (i.suggestion ? '\n  Suggestion: ' + i.suggestion : '')
+              ).join('\n')}
+            files: "${output.issues.map(i => i.file).unique()}"
+            verification: "All previous verification checks pass"
+          context: "${output.issues.map(i => i.file).unique()}"
+
+      - name: re_verify
+        description: Run verification again
+        stage: verify
+        with_same_input: true
+
+    on_success:
+      - log: "Auto-fix succeeded on attempt ${attempt}"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Auto-fix failed after ${max_retries} attempts"
+      - escalate_to: blocked
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Blocked → Pause and notify
+  # ─────────────────────────────────────────────────────────────────────────────
+  blocked:
+    description: Pause for human intervention
+
+    action:
+      - name: update_state
+        updates:
+          feature.status: in_progress
+          session.last_action: "Verification blocked - needs human input"
+          session.resume.context: |
+            Feature blocked during verification.
+
+            Issues requiring attention:
+            ${output.issues.filter(i => i.severity == 'error').map(i =>
+              '- ' + i.message
+            ).join('\n')}
+
+            Files involved:
+            ${output.issues.map(i => i.file).unique().join('\n')}
+
+      - name: save_checkpoint
+        path: "${FEATURE_DIR}/checkpoint.yaml"
+        include:
+          - stage_outputs
+          - verification_issues
+          - position
+
+      - name: notify
+        message: |
+          ## Verification Blocked
+
+          Feature **${FEATURE_ID}** needs your attention.
+
+          **Issues:**
+          ${output.issues.filter(i => i.severity == 'error').map(i =>
+            '- ' + i.message + ' (' + i.file + ')'
+          ).join('\n')}
+
+          **To resume:**
+          1. Fix the issues manually, or
+          2. Run `/yolo:feature resume` after addressing blockers
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Design issues → Re-plan
+  # ─────────────────────────────────────────────────────────────────────────────
+  design:
+    description: Fundamental issue - need to reconsider approach
+    max_retries: 1
+
+    action:
+      - name: spawn_decide_agent
+        agent: decide-conversation
+        input:
+          question: |
+            Verification failed with fundamental issues.
+            Should we:
+            1. Revise the implementation approach
+            2. Simplify the feature scope
+            3. Address the design concerns directly
+          context: |
+            ## Original Goal
+            ${FEATURE_GOAL}
+
+            ## Verification Issues
+            ${output.issues.map(i => '- ' + i.message).join('\n')}
+
+            ## What We Tried
+            ${execution_results.map(r => '- ' + r.task.title).join('\n')}
+          options:
+            - "Revise implementation approach"
+            - "Simplify feature scope"
+            - "Address design concerns directly"
+          priority: quality
+
+      - name: re_plan
+        description: Create new plan based on decision
+        stage: plan
+        input:
+          goal: "${FEATURE_GOAL}"
+          context: |
+            Previous attempt failed verification.
+
+            Decision: ${decide_result.decision}
+
+            Approach: ${decide_result.approach}
+          constraints:
+            - "Address: ${output.issues.map(i => i.message).join(', ')}"
+
+      - name: notify
+        message: |
+          ## Approach Revised
+
+          Verification revealed design issues.
+
+          **New approach:** ${decide_result.decision}
+
+          Continuing with revised plan...
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Unknown → Escalate to blocked
+  # ─────────────────────────────────────────────────────────────────────────────
+  unknown:
+    description: Unclassified verification failure - escalate for review
+    max_retries: 1
+
+    action:
+      - name: log
+        message: "Unclassified verification failure - escalating"
+
+      - name: escalate
+        to: blocked
+        message: |
+          Verification failed with unclassified issues:
+          ${output.issues.map(i => '- ' + i.message).join('\n')}
+
+    on_success:
+      - log: "Unknown verification issue resolved"
+      - continue_pipeline: true
+
+    on_failure:
+      - log: "Unknown verification issue could not be resolved"
+      - escalate_to: blocked

@@ -1,0 +1,200 @@
+# Research Contract
+# ═══════════════════════════════════════════════════════════════════════════════
+# Explore codebase, intake materials, and gather context for a goal
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: research
+version: 1
+description: Explore codebase, intake materials, and gather context for a goal
+
+# ───────────────────────────────────────────────────────────────────────────────
+# INPUT SCHEMA
+# ───────────────────────────────────────────────────────────────────────────────
+
+input:
+  required:
+    goal:
+      type: string
+      description: What we're trying to understand or build
+
+    scope:
+      type: string
+      description: Directory or area to focus on (e.g., "src/", "src/auth/")
+
+  optional:
+    intake:
+      type: IntakeRef
+      description: Reference to intake materials (Figma, Notion, briefs)
+      schema:
+        version:
+          type: string
+          description: Intake version (e.g., "mvp-v1")
+        path:
+          type: string
+          description: Path to intake directory (e.g., "releases/2026-02-04-mvp/intake/mvp-v1")
+        sources:
+          type: list
+          items:
+            type: Source
+            schema:
+              type:
+                type: string
+                enum: [figma, notion, linear, jira, confluence, slack, miro, gdocs, swagger, graphql, website, github, db, openapi, postman, protobuf, graphql-schema, pdf, csv, sql, har, docker, terraform, envfile, manual, notes]
+              path:
+                type: string
+                description: Path to digest or files
+              priority:
+                type: string
+                enum: [high, medium, low]
+
+    depth:
+      type: string
+      enum: [shallow, medium, deep]
+      default: medium
+      description: How deep to explore the codebase
+
+    include_external:
+      type: boolean
+      default: false
+      description: Whether to search external docs/web
+
+    interactive:
+      type: boolean
+      default: false
+      description: Whether agent can ask user questions during research
+
+    release_context:
+      type: ReleaseContext
+      description: Release context when research is performed as part of a release flow
+      schema:
+        release_id:
+          type: string
+          optional: true
+          description: Identifier of the release
+        release_goal:
+          type: string
+          optional: true
+          description: High-level goal of the release
+
+# ───────────────────────────────────────────────────────────────────────────────
+# OUTPUT SCHEMA
+# ───────────────────────────────────────────────────────────────────────────────
+
+output:
+  required:
+    findings:
+      type: markdown
+      description: Combined findings from codebase and intake analysis
+
+    relevant_files:
+      type: list
+      items:
+        type: string
+      description: File paths relevant to the goal
+
+    patterns:
+      type: list
+      items:
+        type: string
+      description: Patterns and conventions observed in the codebase
+
+  optional:
+    intake_insights:
+      type: list
+      description: Key insights extracted from intake materials
+      items:
+        type: IntakeInsight
+        schema:
+          source:
+            type: string
+            description: Which intake source (figma, notion, etc.)
+          insight:
+            type: string
+            description: What was learned
+          applies_to:
+            type: list
+            items:
+              type: string
+            description: Which parts of codebase this applies to
+
+    gaps:
+      type: list
+      description: Gaps between intake requirements and codebase
+      items:
+        type: Gap
+        schema:
+          requirement:
+            type: string
+            description: Requirement from intake
+          current_state:
+            type: string
+            description: What currently exists in codebase
+          gap:
+            type: string
+            description: What's missing
+
+    concerns:
+      type: list
+      items:
+        type: string
+      description: Potential issues or risks identified
+
+    suggestions:
+      type: list
+      items:
+        type: string
+      description: Implementation suggestions based on findings
+
+    user_decisions:
+      type: list
+      description: Decisions made by user during interactive research
+      # Note: Only applicable when interactive=true
+      items:
+        type: UserDecision
+        schema:
+          question:
+            type: string
+            description: What was asked
+          answer:
+            type: string
+            description: What user chose
+          impact:
+            type: string
+            description: How this affected research direction
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TOOLS
+# ───────────────────────────────────────────────────────────────────────────────
+
+tools:
+  base:
+    - Read
+    - Glob
+    - Grep
+
+  external:
+    - WebSearch
+    - WebFetch
+
+  interactive:
+    - AskUserQuestion  # Virtual tool — maps to returning structured questions in output for the orchestrator to present to the user.
+
+# Tool selection logic:
+# - Always include: base
+# - If include_external: add external
+# - If interactive: add interactive
+
+# ───────────────────────────────────────────────────────────────────────────────
+# VALIDATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+validation:
+  input:
+    - goal must not be empty
+    - scope must be a valid path pattern
+
+  output:
+    - findings must not be empty
+    - relevant_files must have at least 1 item
+    - patterns must have at least 1 item
+    - if intake provided, intake_insights should be present

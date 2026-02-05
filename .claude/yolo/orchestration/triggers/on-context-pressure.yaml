@@ -1,0 +1,199 @@
+# Trigger: Context Pressure
+# ═══════════════════════════════════════════════════════════════════════════════
+# React when agent context usage is high to prevent quality degradation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: context-pressure
+description: Handle high context usage with checkpointing and fresh spawns
+version: 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TRIGGER CONDITION
+# ───────────────────────────────────────────────────────────────────────────────
+
+trigger:
+  event: agent.context_check
+  conditions:
+    warn: "context_usage > 0.6"      # 60% - start preparing
+    critical: "context_usage > 0.8"  # 80% - must act
+
+# ───────────────────────────────────────────────────────────────────────────────
+# REACTIONS
+# ───────────────────────────────────────────────────────────────────────────────
+
+reactions:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Warning level (60%) → Prepare for handoff
+  # ─────────────────────────────────────────────────────────────────────────────
+  warn:
+    description: Context at 60% - prepare checkpoint
+
+    action:
+      - name: create_checkpoint
+        path: "${FEATURE_DIR}/checkpoint.yaml"
+        content:
+          created_at: "${TIMESTAMP}"
+          reason: "context_pressure_warn"
+          context_usage: "${context_usage}"
+
+          position:
+            pipeline: "${PIPELINE_NAME}"
+            stage: "${CURRENT_STAGE}"
+            task_index: "${CURRENT_TASK_INDEX}"
+
+          completed:
+            stages: "${completed_stages}"
+            tasks: "${completed_tasks}"
+
+          pending:
+            stages: "${pending_stages}"
+            tasks: "${pending_tasks}"
+
+          outputs:
+            research: "${research_findings}"
+            plan: "${execution_plan}"
+            execution: "${execution_results}"
+
+          context_summary: |
+            ## Feature
+            ${FEATURE_GOAL}
+
+            ## Progress
+            - Completed ${completed_tasks.length} of ${total_tasks} tasks
+            - Current stage: ${CURRENT_STAGE}
+
+            ## Key Findings
+            ${research_findings?.findings?.substring(0, 500)}
+
+            ## Remaining Work
+            ${pending_tasks.map(t => '- ' + t.title).join('\n')}
+
+      - name: log
+        message: "Checkpoint created at 60% context usage"
+
+      - name: continue
+        description: Continue current work but monitor closely
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Critical level (80%) → Spawn fresh agent
+  # ─────────────────────────────────────────────────────────────────────────────
+  critical:
+    description: Context at 80% - must spawn fresh agent
+
+    action:
+      - name: finalize_checkpoint
+        path: "${FEATURE_DIR}/checkpoint.yaml"
+        update:
+          reason: "context_pressure_critical"
+          context_usage: "${context_usage}"
+          handoff_required: true
+
+      - name: update_state
+        updates:
+          session.last_activity: "${TIMESTAMP}"
+          session.last_action: "Context pressure - spawning fresh agent"
+          session.resume:
+            file: "${FEATURE_DIR}/checkpoint.yaml"
+            context: |
+              Feature ${FEATURE_ID} in progress.
+              Context limit reached at ${CURRENT_STAGE}.
+              ${completed_tasks.length}/${total_tasks} tasks complete.
+              Resume from checkpoint to continue.
+
+      # NOTE: Intentionally bypasses orchestrator to spawn a fresh agent directly.
+      # At critical context pressure (80%+), routing through the orchestrator would
+      # add more context and risk failure. Direct spawn is the safe recovery path.
+      - name: spawn_fresh_agent
+        description: Start new agent with minimal context (intentionally bypasses orchestrator)
+        prompt: |
+          ## Resume Feature: ${FEATURE_ID}
+
+          You are continuing work on a feature that was in progress.
+
+          **Goal:** ${FEATURE_GOAL}
+
+          **Status:**
+          - Stage: ${CURRENT_STAGE}
+          - Tasks: ${completed_tasks.length}/${total_tasks} complete
+
+          **Checkpoint:** ${FEATURE_DIR}/checkpoint.yaml
+
+          **Next Steps:**
+          1. Read the checkpoint file
+          2. Understand what's been done
+          3. Continue from where we left off
+          4. Complete remaining tasks
+
+          **Remaining Tasks:**
+          ${pending_tasks.map(t => '- ' + t.title).join('\n')}
+
+      - name: terminate_current
+        description: Stop current agent cleanly
+        message: "Handing off to fresh agent due to context pressure"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CHECKPOINT STRUCTURE
+# ───────────────────────────────────────────────────────────────────────────────
+
+checkpoint_schema:
+  required:
+    - created_at
+    - reason
+    - context_usage
+    - position
+    - completed
+    - pending
+    - context_summary
+
+  optional:
+    - outputs
+    - errors
+    - decisions_made
+
+# ───────────────────────────────────────────────────────────────────────────────
+# RECOVERY PROCESS
+# ───────────────────────────────────────────────────────────────────────────────
+
+recovery:
+  on_resume:
+    steps:
+      - name: load_checkpoint
+        path: "${FEATURE_DIR}/checkpoint.yaml"
+
+      - name: restore_position
+        set:
+          CURRENT_STAGE: "${checkpoint.position.stage}"
+          CURRENT_TASK_INDEX: "${checkpoint.position.task_index}"
+
+      - name: restore_outputs
+        set:
+          research_findings: "${checkpoint.outputs.research}"
+          execution_plan: "${checkpoint.outputs.plan}"
+          execution_results: "${checkpoint.outputs.execution}"
+
+      - name: continue_pipeline
+        from_stage: "${checkpoint.position.stage}"
+        from_task: "${checkpoint.position.task_index}"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# PREVENTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+prevention:
+  # Strategies to reduce context pressure
+  strategies:
+    - name: summarize_research
+      when: "after research stage"
+      action: "Compress findings to essential points"
+
+    - name: prune_execution_results
+      when: "after each task"
+      action: "Keep only status, files_changed, commit_message"
+
+    - name: limit_file_reads
+      when: "during any stage"
+      action: "Respect max_files limits in implementations"
+
+    - name: use_quick_variants
+      when: "context_usage > 0.5"
+      action: "Switch to quick implementations for remaining work"

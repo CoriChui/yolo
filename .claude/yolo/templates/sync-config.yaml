@@ -1,0 +1,70 @@
+# Sync Configuration
+# Location: .planning/sync/config.yaml
+
+# Primary tracker
+tracker: github
+
+# GitHub configuration
+github:
+  repository: owner/repo           # Auto-detected from git remote
+  auth: gh_cli                     # Authentication method
+  default_filter:
+    state: open
+    labels: []
+    milestone: null
+
+# GitLab configuration (if used)
+# gitlab:
+#   repository: owner/repo
+#   auth: glab_cli
+
+# Linear configuration (if used)
+# linear:
+#   team: TEAM_KEY
+#   auth: api_key                  # Uses LINEAR_API_KEY env var
+
+# Jira configuration (if used)
+# jira:
+#   project: PROJECT_KEY
+#   host: company.atlassian.net
+#   auth: api_token                # Uses JIRA_API_TOKEN env var
+
+# Type mapping rules
+# External label/type → YOLO type
+mapping:
+  release:
+    - epic
+    - initiative
+    - project
+    - milestone
+
+  feature:
+    - feature
+    - story
+    - user-story
+    - enhancement
+
+  do:
+    - bug
+    - fix
+    - hotfix
+    - task
+    - chore
+    - documentation
+    - refactor
+    - security
+    - performance
+
+  feature-task:                    # YOLO feature tasks
+    - subtask
+
+  # Default if no label matches
+  default: do
+
+# Sync behavior
+sync:
+  direction: import                # import | bidirectional (future)
+  conflict_resolution: tracker     # tracker always wins
+  import_comments: true            # Import issue comments
+  import_status: true              # Import status changes
+  auto_refresh: on-pull            # When to check for updates

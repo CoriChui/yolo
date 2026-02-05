@@ -1,0 +1,140 @@
+# YOLO Configuration Template
+#
+# Copy to .planning/config.yaml and customize for your project.
+# ─────────────────────────────────────────────────────────────────
+
+# Schema version for config format
+schema_version: 1
+
+# ═══════════════════════════════════════════════════════════════
+# WORKFLOW SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+workflow:
+  # Enable research before planning
+  research: true
+
+  # Enable plan verification before execution
+  plan_check: true
+
+  # Enable goal-backward verification after execution
+  verifier: true
+
+# ═══════════════════════════════════════════════════════════════
+# INTAKE SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+intake:
+  # Default source for /intake capture
+  default_source: figma
+
+  # Auto-lock intake when release starts
+  auto_lock: true
+
+  # Categories to include in intake
+  categories:
+    - domain
+    - contracts
+    - flows
+    - constraints
+
+# ═══════════════════════════════════════════════════════════════
+# PROPOSAL SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+proposals:
+  # Require user approval for all proposals
+  require_approval: true
+
+  # Auto-apply non-blocking proposals at release end
+  auto_finalize: false
+
+  # Default severity for new proposals
+  default_severity: important  # blocking | important | minor
+
+# ═══════════════════════════════════════════════════════════════
+# PLANNING SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+planning:
+  # Commit planning docs to git
+  commit_docs: true
+
+  # Include gitignored files in searches
+  search_gitignored: false
+
+# ═══════════════════════════════════════════════════════════════
+# EXECUTION SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+execution:
+  # Enable parallel task execution within feature
+  parallel_tasks: false
+
+  # Maximum concurrent agents (if parallel enabled)
+  max_concurrent_agents: 3
+
+# ═══════════════════════════════════════════════════════════════
+# GATES (User Confirmations)
+# ═══════════════════════════════════════════════════════════════
+
+gates:
+  # Confirm before starting new release
+  confirm_release: true
+
+  # Confirm feature plan before execution
+  confirm_plan: true
+
+  # Confirm before feature transition
+  confirm_transition: true
+
+  # Review blocking proposals immediately
+  review_blocking: true
+
+# ═══════════════════════════════════════════════════════════════
+# SAFETY
+# ═══════════════════════════════════════════════════════════════
+
+safety:
+  # Always confirm destructive operations
+  always_confirm_destructive: true
+
+  # Always confirm external service calls
+  always_confirm_external_services: true
+
+# ═══════════════════════════════════════════════════════════════
+# MODEL PROFILES
+# ═══════════════════════════════════════════════════════════════
+
+# Agent model assignments by profile
+# Profiles: quality | balanced | budget
+model_profile: balanced  # Default profile. Also configurable per-release in state.yaml
+
+profiles:
+  quality:
+    research: thorough
+    plan: detailed
+    execute: standard    # fix variant used automatically by triggers
+    verify: strict
+    decide: conversation
+
+  balanced:
+    research: thorough
+    plan: detailed
+    execute: standard    # fix variant used automatically by triggers
+    verify: strict
+    decide: conversation
+
+  budget:
+    research: quick
+    plan: minimal
+    execute: standard    # fix variant used automatically by triggers
+    verify: basic
+    decide: null         # execute agent makes design decisions inline
+
+  guided:
+    research: interactive
+    plan: detailed
+    execute: standard    # fix variant used automatically by triggers
+    verify: strict
+    decide: conversation

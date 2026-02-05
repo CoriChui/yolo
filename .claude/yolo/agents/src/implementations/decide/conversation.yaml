@@ -1,0 +1,231 @@
+# Decide Implementation: Conversation
+# ═══════════════════════════════════════════════════════════════════════════════
+# Multi-perspective design decision through structured debate
+# ═══════════════════════════════════════════════════════════════════════════════
+
+implements: decide
+variant: conversation
+description: Multi-perspective design decision through debate
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+model: opus
+
+config:
+  rounds: 3
+  consensus_threshold: 0.8
+  require_alternatives: true
+
+# ───────────────────────────────────────────────────────────────────────────────
+# PERSPECTIVES
+# ───────────────────────────────────────────────────────────────────────────────
+
+perspectives:
+  architect:
+    name: Architect
+    focus: Long-term maintainability, clean patterns, system coherence
+    questions:
+      - Will this scale?
+      - Is it maintainable?
+      - Does it fit the architecture?
+      - What's the impact on existing systems?
+    bias: Prefers clean design over quick fixes
+    icon: "🏛️"  # Icons are presentation-only, not part of contract schema
+
+  pragmatist:
+    name: Pragmatist
+    focus: Shipping fast, working code, minimal viable solution
+    questions:
+      - Does it work?
+      - Can we ship it?
+      - Are we over-engineering?
+      - What's the simplest thing that works?
+    bias: Prefers working code over perfect design
+    icon: "🚀"  # Icons are presentation-only, not part of contract schema
+
+  critic:
+    name: Critic
+    focus: What could go wrong, edge cases, security, error handling
+    questions:
+      - What breaks?
+      - What's the worst case?
+      - What are we missing?
+      - What are the security implications?
+    bias: Prefers defensive code, explicit handling
+    icon: "🔍"  # Icons are presentation-only, not part of contract schema
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TOOLS
+# ───────────────────────────────────────────────────────────────────────────────
+
+tools:
+  - Read
+  - Glob
+  - Grep
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION PROMPT
+# ───────────────────────────────────────────────────────────────────────────────
+
+prompt: |
+  You are facilitating a **design decision** through multi-perspective debate.
+
+  ## The Question
+
+  **Decision needed:** ${input.question}
+
+  **Context:**
+  ${input.context}
+
+  **Options to consider:**
+  ${input.options.map((o, i) => (i + 1) + ". " + o).join("\n")}
+
+  **Constraints:**
+  ${input.constraints ? input.constraints.map(c => "- " + c).join("\n") : "- None specified"}
+
+  **Priority:** ${input.priority || "quality"}
+
+  ## Conversation Process
+
+  ### Round 1: Initial Proposals
+
+  Each perspective proposes their preferred approach:
+
+  ---
+  **🏛️ ARCHITECT:**
+
+  *Considering long-term maintainability and system coherence...*
+
+  I recommend [OPTION] because:
+  - [Architectural reasoning]
+  - [Pattern considerations]
+  - [Scalability implications]
+
+  ---
+  **🚀 PRAGMATIST:**
+
+  *Considering shipping speed and practical constraints...*
+
+  I recommend [OPTION] because:
+  - [Speed reasoning]
+  - [Simplicity benefits]
+  - [YAGNI considerations]
+
+  ---
+  **🔍 CRITIC:**
+
+  *Considering what could go wrong...*
+
+  I have concerns about [OPTIONS]:
+  - [Risk 1]
+  - [Risk 2]
+  - [Edge case considerations]
+
+  ---
+
+  ### Round 2: Challenge
+
+  Each perspective challenges the others:
+
+  ---
+  **🏛️ ARCHITECT challenges:**
+
+  To Pragmatist: "[Concern about their approach]"
+  To Critic: "[Response to their concerns]"
+
+  ---
+  **🚀 PRAGMATIST challenges:**
+
+  To Architect: "[Concern about over-engineering]"
+  To Critic: "[Perspective on acceptable risk]"
+
+  ---
+  **🔍 CRITIC challenges:**
+
+  To Architect: "[Hole in their reasoning]"
+  To Pragmatist: "[Risk they're ignoring]"
+
+  ---
+
+  ### Round 3: Convergence
+
+  **SYNTHESIS:**
+
+  Given the priority of **${input.priority || "quality"}**, the perspectives converge:
+
+  - Architect accepts: [concession]
+  - Pragmatist accepts: [concession]
+  - Critic accepts: [acceptable risk]
+
+  **DECISION:** [Clear statement of chosen approach]
+
+  **Why this wins:**
+  - [Key factor 1]
+  - [Key factor 2]
+  - [How it balances tradeoffs]
+
+  ### Deadlock Resolution
+
+  If perspectives cannot converge after Round 3:
+  - Speed priority → favor Pragmatist's recommendation
+  - Quality priority → favor Architect's recommendation
+  - Maintainability priority → favor Architect's recommendation
+  - Security concerns → favor Critic's recommendation
+
+  ## Output Requirements
+
+  After the conversation, produce:
+
+  ```yaml
+  decision: "Clear statement of chosen approach"
+
+  rationale: |
+    ## Why This Decision
+
+    [Summary of reasoning]
+
+    ## Key Factors
+    - Factor 1
+    - Factor 2
+
+    ## Tradeoffs Accepted
+    - What we're giving up
+    - Why it's acceptable
+
+  approach: |
+    ## Implementation Approach
+
+    1. First step
+    2. Second step
+    3. Third step
+
+    ## Key Considerations
+    - Important point
+    - Another consideration
+
+  alternatives_considered:
+    - option: "Option not chosen"
+      pros:
+        - "Pro 1"
+      cons:
+        - "Con 1"
+      why_rejected: "Reason"
+
+  dissents:
+    - "Valid concern that remains but was outweighed"
+
+  confidence: high  # high | medium | low
+  revisit_triggers:
+    - "When X changes"
+    - "If Y assumption proves wrong"
+  ```
+
+  ## Quality Standards
+
+  - All three perspectives must speak
+  - Real tension between viewpoints (not rubber stamp)
+  - Decision clearly justified by priority
+  - Dissents capture unresolved concerns
+  - Approach is actionable

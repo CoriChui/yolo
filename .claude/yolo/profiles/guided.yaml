@@ -1,0 +1,113 @@
+# Profile: Guided
+# ═══════════════════════════════════════════════════════════════════════════════
+# Interactive research with user guidance
+# Best for: Complex/ambiguous goals, unfamiliar domains
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: guided
+description: User-guided workflow with interactive research
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION SELECTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+implementations:
+  research: interactive   # Asks user questions during research
+  plan: detailed          # Full planning after user input
+  execute: standard       # fix variant used automatically by triggers on verification failure
+  verify: strict          # Thorough verification
+  decide: conversation    # Multi-perspective decisions
+
+# ───────────────────────────────────────────────────────────────────────────────
+# MODEL OVERRIDES (optional)
+# ───────────────────────────────────────────────────────────────────────────────
+
+models:
+  research: opus          # Best model for quality questions
+  plan: opus
+  execute: sonnet
+  verify: opus
+  decide: opus
+
+# ───────────────────────────────────────────────────────────────────────────────
+# BEHAVIOR
+# ───────────────────────────────────────────────────────────────────────────────
+
+behavior:
+  # Research settings
+  research:
+    depth: deep
+    include_external: true
+    max_files: 50
+    follow_imports: true
+    interactive: true
+    max_questions: 3
+
+  # Planning settings
+  plan:
+    max_tasks: 5
+    require_coverage: true
+    include_risks: true
+
+  # Verification settings
+  verify:
+    run_tests: true
+    check_types: true
+    check_lint: true
+    strict_mode: true
+
+  # Error handling
+  errors:
+    max_retries: 3
+    on_failure: ask_user
+
+# ───────────────────────────────────────────────────────────────────────────────
+# INTERACTION
+# ───────────────────────────────────────────────────────────────────────────────
+
+interaction:
+  mode: guided
+  ask_on_ambiguity: true
+  ask_on_design_decision: true
+
+  # Interactive research settings
+  research_questions:
+    # max_questions defined in behavior.research.max_questions (canonical location)
+    question_style: focused
+    require_options: true
+    allow_freeform: true
+
+  # When to ask during research
+  ask_when:
+    - multiple_valid_approaches
+    - ambiguous_requirements
+    - conflicting_patterns
+    - unclear_intake
+    - scope_uncertainty
+
+# ───────────────────────────────────────────────────────────────────────────────
+# COST/PERFORMANCE
+# ───────────────────────────────────────────────────────────────────────────────
+
+estimates:
+  tokens_per_feature: 35000-55000
+  cost_per_feature: $0.35-0.55
+  relative_speed: slow (includes user wait time)
+
+# ───────────────────────────────────────────────────────────────────────────────
+# USE WHEN
+# ───────────────────────────────────────────────────────────────────────────────
+
+recommended_for:
+  - Complex features with unclear requirements
+  - Unfamiliar domains or codebases
+  - When multiple approaches are viable
+  - Learning a new codebase
+  - When you want to stay involved in decisions
+  - Features that need your domain expertise
+
+not_recommended_for:
+  - Simple, well-defined tasks
+  - When you want hands-off automation
+  - Time-pressured work
+  - Batch processing multiple features

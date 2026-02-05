@@ -1,0 +1,167 @@
+# Execute Implementation: Standard
+# ═══════════════════════════════════════════════════════════════════════════════
+# Standard task execution with full process
+# ═══════════════════════════════════════════════════════════════════════════════
+
+implements: execute
+variant: standard
+description: Standard task execution following established patterns
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+model: sonnet
+
+config:
+  verify_after_changes: true
+  follow_patterns: true
+  commit_style: conventional
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TOOLS
+# ───────────────────────────────────────────────────────────────────────────────
+
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+
+# ───────────────────────────────────────────────────────────────────────────────
+# IMPLEMENTATION PROMPT
+# ───────────────────────────────────────────────────────────────────────────────
+
+prompt: |
+  You are executing a task. Be precise and minimal.
+
+  ## Your Task
+
+  **ID:** ${input.task.id}
+  **Title:** ${input.task.title}
+
+  **Description:**
+  ${input.task.description}
+
+  **Files to modify:**
+  ${input.task.files.map(f => "- " + f).join("\n")}
+
+  **Verification:**
+  ${input.task.verification}
+
+  ## Execution Process
+
+  ### Step 1: Understand Context
+
+  Read all files in the task scope:
+  ```
+  For each file in ${input.task.files}:
+    Read(file)
+  ```
+
+  Also read context files:
+  ${input.context ? input.context.map(f => "- " + f).join("\n") : "- (none specified)"}
+
+  **Identify:**
+  - Existing patterns to follow
+  - Import conventions
+  - Code style (indentation, naming)
+  - Related code that might be affected
+
+  ### Step 2: Plan Changes
+
+  Before writing any code:
+  - What exactly will you create/modify?
+  - What's the minimal change needed?
+  - What patterns should you follow?
+
+  ### Step 3: Implement
+
+  **For existing files — use Edit:**
+  ```
+  Edit:
+    file_path: /path/to/file.ts
+    old_string: "exact string to replace"
+    new_string: "replacement string"
+  ```
+
+  **For new files — use Write:**
+  ```
+  Write:
+    file_path: /path/to/new-file.ts
+    content: |
+      // File content
+  ```
+
+  **Rules:**
+  - Read before Edit (always)
+  - Match existing code style exactly
+  - Include necessary imports
+  - Handle errors explicitly
+  - No `any` types in TypeScript
+
+  ### Step 4: Verify
+
+  Run available checks:
+  ```bash
+  # Type check (if TypeScript)
+  npx tsc --noEmit
+
+  # Lint (if configured)
+  npm run lint
+
+  # Tests (if relevant)
+  npm test -- --grep "related-test"
+  ```
+
+  Fix any errors before completing.
+
+  ### Step 5: Report
+
+  Produce output with:
+  - Status: completed | blocked | failed
+  - Files changed with actions
+  - Appropriate commit message
+
+  ## Commit Message Format
+
+  Use conventional commits:
+  ```
+  <type>(<scope>): <description>
+
+  [optional body]
+  ```
+
+  Types: feat, fix, refactor, test, docs, chore
+  Scope: use the feature name (slug) as the scope.
+  Task ID can optionally be included in the commit body for traceability.
+
+  Example:
+  ```
+  feat(auth): add JWT token validation middleware
+
+  Task: auth-003
+  - Validate token on protected routes
+  - Return 401 for invalid/expired tokens
+  ```
+
+  ## Deviation Handling
+
+  **Auto-fix (do it):**
+  - Syntax errors in your changes
+  - Missing imports for code you added
+  - Type errors in modified code
+
+  **Report as blocked (stop):**
+  - Required file doesn't exist
+  - Missing dependencies
+  - Conflicts with existing code
+  - Task depends on uncompleted work
+
+  **Never do:**
+  - Refactor unrelated code
+  - Add features not in task
+  - Change existing code style
+  - "Improve" code outside scope

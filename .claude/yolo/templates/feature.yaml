@@ -1,0 +1,139 @@
+# FEATURE.yaml Template
+#
+# Atomic work unit with clear scope, research, and plan.
+# Location (release): .planning/releases/<release>/features/<id>/feature.yaml
+# Location (standalone): .planning/features/<slug>/feature.yaml
+# ─────────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════
+# IDENTIFICATION
+# ═══════════════════════════════════════════════════════════════
+
+id: null                            # Feature ID
+                                    # Release: number (e.g., "02")
+                                    # Standalone: slug (e.g., "dark-mode")
+
+name: null                          # Short name (e.g., "auth" or "dark-mode")
+title: null                         # Full title (e.g., "Authentication and Authorization")
+created: null                       # ISO 8601 datetime
+
+# ═══════════════════════════════════════════════════════════════
+# CONTEXT
+# ═══════════════════════════════════════════════════════════════
+
+release: null                       # Parent release ID (e.g., "2026-02-04-mvp")
+                                    # null = standalone feature
+
+depends_on: []                      # Feature dependencies
+                                    # Same release: ["01-foundation"]
+                                    # Cross-release: ["release:2026-02-04-mvp/01-foundation"]
+                                    # Standalone: ["standalone:dark-mode"]
+
+# ═══════════════════════════════════════════════════════════════
+# GOALS
+# ═══════════════════════════════════════════════════════════════
+
+goal: null                          # Multi-line description of what this feature delivers
+# Example:
+#   goal: |
+#     Implement authentication via Supabase Auth
+#     with 2FA support for enhanced security.
+
+# Success criteria (observable behaviors from user perspective)
+success_criteria: []
+# Example:
+#   - "User can login via email/password"
+#   - "User can enable 2FA"
+#   - "Session persists between reloads"
+#   - "User can reset password"
+
+# ═══════════════════════════════════════════════════════════════
+# REQUIREMENTS BINDING
+# ═══════════════════════════════════════════════════════════════
+
+# Requirements from requirements.md that this feature addresses
+# Only applicable for release features
+requirements: []
+# Example:
+#   - AUTH-01
+#   - AUTH-02
+#   - AUTH-03
+
+# ═══════════════════════════════════════════════════════════════
+# STATUS
+# ═══════════════════════════════════════════════════════════════
+
+# Feature lifecycle: pending -> researching -> planning -> in_progress -> verifying -> completed (blocked and dropped are lateral/terminal states)
+status: pending
+
+started_at: null                    # ISO 8601 datetime
+completed_at: null                  # ISO 8601 datetime
+research_started_at: null           # ISO 8601 datetime
+planning_started_at: null           # ISO 8601 datetime
+verification_started_at: null       # ISO 8601 datetime
+blocked_at: null                    # ISO 8601 datetime
+dropped_at: null                    # ISO 8601 datetime
+
+# ═══════════════════════════════════════════════════════════════
+# BLOCKED (populated when status: blocked)
+# ═══════════════════════════════════════════════════════════════
+
+blocked:
+  since: null
+  reason: null
+  dependency: null
+  type: null                        # feature | external | technical
+
+# ═══════════════════════════════════════════════════════════════
+# TASKS (Synced from plan.md)
+# ═══════════════════════════════════════════════════════════════
+
+tasks:
+  total: 0                          # Total task count
+  completed: 0                      # Completed task count
+  current: null                     # Current task description or slug-based task ID from plan.md (null when completed)
+
+# ═══════════════════════════════════════════════════════════════
+# RESEARCH
+# ═══════════════════════════════════════════════════════════════
+
+research:
+  required: false                   # Is research required for this feature?
+  completed: false                  # Has research been completed?
+  file: null                        # Path to discovery.md (e.g., "research/discovery.md")
+
+# ─────────────────────────────────────────────────────────────────
+# TEMPLATE NOTES
+# ─────────────────────────────────────────────────────────────────
+#
+# Feature Types:
+# 1. Release Feature - belongs to a release, nested in release directory
+#    - release: "2026-02-04-mvp" (not null)
+#    - Location: .planning/releases/2026-02-04-mvp/features/02-auth/
+#    - ID format: sequential number (e.g., "02")
+#
+# 2. Standalone Feature - independent, no release
+#    - release: null
+#    - Location: .planning/features/dark-mode/
+#    - ID format: slug (e.g., "dark-mode")
+#
+# Feature Lifecycle:
+#   pending      → Feature exists, not yet started
+#   researching  → Exploring codebase and intake, creating discovery.md
+#   planning     → Creating plan.md with tasks
+#   in_progress  → Executing tasks
+#   blocked      → Waiting on dependency (lateral state, can return to previous)
+#   verifying    → Checking success criteria
+#   completed    → summary.md created, committed
+#   dropped      → Feature abandoned (terminal state)
+#
+# Attach/Detach:
+# - Standalone features can be attached to a release
+# - Release features can be detached to become standalone
+# - Features cannot move directly between releases (must detach first)
+#
+# Related files in feature directory:
+#   research/discovery.md     - Research findings
+#   plan.md                   - Execution plan with tasks
+#   verification.md           - Verification results
+#   summary.md                - Feature completion summary

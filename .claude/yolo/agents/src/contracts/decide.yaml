@@ -1,0 +1,186 @@
+# Decide Contract
+# ═══════════════════════════════════════════════════════════════════════════════
+# Make design decisions through multi-perspective analysis
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: decide
+version: 1
+description: Make design decisions using conversation pattern with multiple perspectives
+
+# ───────────────────────────────────────────────────────────────────────────────
+# INPUT SCHEMA
+# ───────────────────────────────────────────────────────────────────────────────
+
+input:
+  required:
+    question:
+      type: string
+      description: The design question to decide
+
+    context:
+      type: markdown
+      description: Relevant context for making the decision
+
+    options:
+      type: list
+      items:
+        type: string
+      description: Available options to choose from
+
+  optional:
+    constraints:
+      type: list
+      items:
+        type: string
+      description: Constraints that must be respected
+
+    priority:
+      type: string
+      enum: [speed, quality, maintainability]
+      default: quality
+      description: What to optimize for when tradeoffs arise
+
+    additional_context:
+      type: list
+      items:
+        type: string
+      description: Additional files to read for context
+
+# ───────────────────────────────────────────────────────────────────────────────
+# OUTPUT SCHEMA
+# ───────────────────────────────────────────────────────────────────────────────
+
+output:
+  required:
+    decision:
+      type: string
+      description: Clear statement of the chosen approach
+
+    rationale:
+      type: markdown
+      description: Why this decision was made, including key factors and tradeoffs
+
+    approach:
+      type: markdown
+      description: How to implement the decision (actionable steps)
+
+  optional:
+    alternatives_considered:
+      type: list
+      description: Other options that were evaluated
+      items:
+        type: Alternative
+        schema:
+          option:
+            type: string
+            description: The alternative option
+
+          pros:
+            type: list
+            items:
+              type: string
+            description: Advantages of this option
+
+          cons:
+            type: list
+            items:
+              type: string
+            description: Disadvantages of this option
+
+          why_rejected:
+            type: string
+            description: Why this option wasn't chosen
+
+    dissents:
+      type: list
+      items:
+        type: string
+      description: Valid concerns that were outweighed but remain relevant
+
+    confidence:
+      type: string
+      enum: [high, medium, low]
+      description: Confidence level in the decision
+
+    revisit_triggers:
+      type: list
+      items:
+        type: string
+      description: Conditions that should trigger revisiting this decision
+
+# ───────────────────────────────────────────────────────────────────────────────
+# PATTERN
+# ───────────────────────────────────────────────────────────────────────────────
+
+pattern: conversation
+
+conversation:
+  perspectives:
+    architect:
+      focus: Long-term maintainability, clean patterns, system coherence
+      asks:
+        - Will this scale?
+        - Is it maintainable?
+        - Does it fit the architecture?
+      bias: Prefers clean design over quick fixes
+
+    pragmatist:
+      focus: Shipping fast, working code, minimal viable solution
+      asks:
+        - Does it work?
+        - Can we ship it?
+        - Are we over-engineering?
+      bias: Prefers working code over perfect design
+
+    critic:
+      focus: What could go wrong, edge cases, security, error handling
+      asks:
+        - What breaks?
+        - What's the worst case?
+        - What are we missing?
+      bias: Prefers defensive code, explicit handling
+
+  rounds: 3
+
+  flow:
+    round_1: Each perspective proposes their preferred approach
+    round_2: Each perspective challenges the others
+    round_3: Synthesize and converge on decision
+
+  consensus_rule: "At least 2 of 3 perspectives must positively support the decision; remaining perspective must acknowledge it as acceptable even if not preferred"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TOOLS
+# ───────────────────────────────────────────────────────────────────────────────
+
+tools:
+  base:
+    - Read
+    - Glob
+    - Grep
+
+# Note: Decide agent is primarily reasoning-based
+# Tools are for gathering additional context if needed
+
+# ───────────────────────────────────────────────────────────────────────────────
+# VALIDATION
+# ───────────────────────────────────────────────────────────────────────────────
+
+validation:
+  input:
+    - question must not be empty
+    - context must not be empty
+    - options must have at least 2 items
+
+  output:
+    - decision must not be empty
+    - decision must clearly state the chosen option
+    - rationale must address the question directly
+    - rationale must acknowledge tradeoffs
+    - approach must be actionable (concrete steps)
+    - if options.length > 2, alternatives_considered should be present
+
+  quality:
+    - decision should reference input.priority
+    - rationale should consider all perspectives
+    - dissents should capture unresolved concerns

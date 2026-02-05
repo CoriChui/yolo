@@ -1,0 +1,181 @@
+# Pipeline: Feature Quick
+# ═══════════════════════════════════════════════════════════════════════════════
+# Streamlined feature workflow — skip optional stages
+# Used by: /yolo:feature start --quick
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: feature-quick
+description: Fast feature workflow skipping detailed research and strict verification
+version: 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# PROFILE MAPPING
+# ───────────────────────────────────────────────────────────────────────────────
+
+# Quick pipeline forces budget-like implementations
+profiles:
+  # All profiles use same quick settings
+  _default:
+    research: quick
+    plan: minimal
+    execute: standard
+    verify: basic
+    decide: null  # Skip decisions
+
+default_profile: _default
+
+# ───────────────────────────────────────────────────────────────────────────────
+# INPUTS
+# ───────────────────────────────────────────────────────────────────────────────
+
+inputs:
+  required:
+    FEATURE_GOAL:
+      type: string
+      description: What this feature should accomplish
+
+    FEATURE_ID:
+      type: string
+      description: Unique identifier for the feature
+
+  optional:
+    SCOPE:
+      type: string
+      default: "src/"
+      description: Directory scope
+
+    INTAKE_VERSION:
+      type: string
+      description: Intake version to use (from state)
+
+    INTAKE_PATH:
+      type: string
+      description: Path to intake directory
+
+# ───────────────────────────────────────────────────────────────────────────────
+# STAGES (Minimal set)
+# ───────────────────────────────────────────────────────────────────────────────
+
+stages:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Stage 1: Quick Research
+  # ─────────────────────────────────────────────────────────────────────────────
+  - name: research
+    description: Fast codebase scan
+    contract: research
+    implementation: quick  # Override profile
+
+    input:
+      goal: "${FEATURE_GOAL}"
+      scope: "${SCOPE}"
+      intake:
+        version: "${INTAKE_VERSION}"
+        path: "${INTAKE_PATH}"
+      depth: shallow
+      include_external: false
+
+    output_as: research_findings
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Stage 2: Minimal Plan
+  # ─────────────────────────────────────────────────────────────────────────────
+  - name: plan
+    description: Quick task breakdown
+    contract: plan
+    implementation: minimal
+
+    input:
+      goal: "${FEATURE_GOAL}"
+      context: "${research_findings.findings}"
+      max_tasks: 3
+
+    output_as: execution_plan
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Stage 3: Execute (loop)
+  # ─────────────────────────────────────────────────────────────────────────────
+  - name: execute
+    description: Implement tasks
+    contract: execute
+
+    loop: "${execution_plan.tasks}"
+    loop_var: current_task
+
+    input:
+      task: "${current_task}"
+      context: "${current_task.files}"
+
+    output_as: execution_results[]
+
+    on_failure:
+      trigger: execution-failed
+      max_retries: 1  # Fewer retries for speed
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Stage 4: Basic Verify
+  # ─────────────────────────────────────────────────────────────────────────────
+  - name: verify
+    description: Quick sanity check
+    contract: verify
+    implementation: basic
+
+    input:
+      criteria: "${execution_plan.tasks.map(t => t.verification)}"
+      files: "${execution_results.flatMap(r => r.files_changed.map(f => f.path))}"
+      run_tests: false
+      strict: false
+
+    output_as: verification_result
+
+# ───────────────────────────────────────────────────────────────────────────────
+# POST-PIPELINE
+# ───────────────────────────────────────────────────────────────────────────────
+
+on_complete:
+  - action: update_state
+    updates:
+      feature.status: completed
+
+  - action: create_commit
+    if: "${verification_result.passed}"
+    message: "feat(${FEATURE_ID}): ${FEATURE_GOAL}"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# CHECKPOINTS (Minimal)
+# ───────────────────────────────────────────────────────────────────────────────
+
+checkpoints:
+  enabled: true
+  path: ".planning/features/${FEATURE_ID}/checkpoint.yaml"
+
+  after_stages:
+    - plan       # Save after plan (research is too quick to bother)
+
+  save:
+    plan:
+      - execution_plan
+      - current_stage: "plan"
+      - completed_at: "${TIMESTAMP}"
+
+  restore:
+    enabled: true
+    strategy: resume_after_last
+
+  on_complete:
+    action: delete_checkpoint
+
+# ───────────────────────────────────────────────────────────────────────────────
+# NOTES
+# ───────────────────────────────────────────────────────────────────────────────
+
+notes: |
+  Use this pipeline when:
+  - Task is simple and well-defined
+  - You're familiar with the codebase
+  - Speed is more important than thoroughness
+  - Prototyping or experimenting
+
+  NOT recommended for:
+  - Complex features
+  - Production-critical changes
+  - Unfamiliar codebases
