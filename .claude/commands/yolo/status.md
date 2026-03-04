@@ -4,12 +4,16 @@ description: Show overall project status
 argument-hint: ""
 allowed-tools:
   - Read
+  - Write
+  - Edit
+  - Bash
   - Glob
   - Grep
 ---
 
 <objective>
 Display overall project status including releases, current feature, and suggested next action.
+Note: Write/Edit are needed for state.yaml reconciliation (crash recovery corrections).
 </objective>
 
 <execution_context>

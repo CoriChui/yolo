@@ -41,10 +41,11 @@ Arguments: $ARGUMENTS
 ## Parse Subcommand
 
 - `new <slug>` → Create pending release
-- `start [id]` → Start pending release (research + features)
+- `start [id] [--prompt "<text>"]` → Start pending release (research + features)
 - `run [id] [--from <id>]` → Run all features sequentially
 - `status [id]` → Show release state (default if empty)
 - `end [id]` → Complete active release
+- **else** → Error: "Unknown subcommand '{arg}'. Run `/yolo:help` for usage."
 
 Read `.claude/yolo/workflows/release.md` and follow the matching subcommand section.
 

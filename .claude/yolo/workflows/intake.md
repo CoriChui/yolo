@@ -1,9 +1,9 @@
 # Intake Workflow
-# Commands: /intake capture, /intake add, /intake list, /intake status
+# Commands: /yolo:intake capture, /yolo:intake add, /yolo:intake list, /yolo:intake status
 
 Intake is **optional auxiliary context** — release-scoped, stored as `.md` digest files.
 Read `.planning/state.yaml` before any operation. Validate it exists and is valid YAML — if missing, error: "Run `/yolo:init` first."
-**Rule:** Every state.yaml mutation must update `updated_at` to current ISO 8601 UTC timestamp.
+**Rule:** Every state.yaml, release.yaml, or manifest.yaml mutation must update `updated_at` to current ISO 8601 UTC timestamp.
 **Rule:** Intake workflows are single-threaded — only one `/intake capture` or `/intake add` operation at a time. Do not run concurrent intake operations on the same release.
 
 ---
@@ -36,15 +36,17 @@ Capture from an external source into the focused release's intake.
 
 ### Process
 
-1. **Resolve release:** Use `--release` flag or `focus.release`. Must be pending/active with unlocked intake.
+1. **Resolve release:** Use `--release` flag or `focus.release`. Must be pending or active (not completed) AND `intake.locked` must be `false`. **Note (TOCTOU):** The `intake.locked` check here and the re-validation in step 11 form a best-effort safety net, not a true lock — the single-threaded rule (see header) is the primary guard against concurrent modification. File writes in steps 5-9 are not protected by a lock between the initial check and the re-validation. **Advisory lock:** Check for existing `.planning/releases/{id}/intake/.capture-in-progress` file — if present and recent (< 30 min), warn user: "A prior intake capture may still be in progress (started at {timestamp} for source {source}). It may have crashed. Override and continue?" via AskUserQuestion. **Crash recovery:** If the lock file exists (stale or acknowledged by user), also check if the source directory from the previous capture exists (`intake/{version}/{source}/`). If found, offer cleanup: "Found orphaned source directory from a prior crashed capture: {source}. Clean up (delete directory and restore conflicts.yaml if modified)?" via AskUserQuestion. If approved, delete the orphaned source directory and revert any `conflicts.yaml` additions from the crashed capture. If the lock file is older than 30 min, treat as stale from a crash and proceed. Then write a temporary file `.planning/releases/{id}/intake/.capture-in-progress` at this step (containing timestamp and source name). `/release end` should check for this file before locking intake — if present and recent (< 30 min), warn: "An intake capture may be in progress. Continue?" Remove the advisory lock in step 14 after completion.
 
-2. **Check MCP** (for MCP sources): Use ToolSearch to load deferred tools, verify server responds. If not configured, show setup command from the Source Catalog table above. Note: only `notion` and `notebooklm` are pre-configured as deferred tools; other MCP sources (`figma`, `linear`, `jira`, `confluence`, `slack`) require user to run the setup command first.
+2. **Check MCP** (for MCP sources): Use ToolSearch to check which MCP tools are available as deferred tools, then load them. Verify server responds. If not configured, show setup command from the Source Catalog table above.
 
 3. **Check existing:** If source already captured, ask: re-capture or skip.
 
-4. **Create source directory:** `intake/{version}/{source}/`
+4. **Enforce intake limits:** Read `config.yaml` `intake.max_files` (default 200). Count existing intake versions for this release (`intake/{slug}-v*` directories) — if count >= 10 (max versions per release), error: "Maximum intake versions (10) reached for this release." Count existing files across all sources in the current version — if count >= `max_files`, error: "Maximum files per version ({max_files}) reached. Start a new patch version or remove unused sources." **Note:** Total size (100 MB) is checked after capture in step 10 below.
 
-5. **Capture content** based on source type:
+5. **Create source directory:** `intake/{version}/{source}/`
+
+6. **Capture content** based on source type:
    - **MCP sources:** Use appropriate MCP tools to fetch content. Save as `.md` files.
    - **WebFetch sources:** Use WebFetch tool. Save raw content in fenced code blocks.
    - **CLI sources:** Run commands via Bash. Save output as `.md`.
@@ -54,21 +56,25 @@ Capture from an external source into the focused release's intake.
    - **Google Sheets special:** Discover all tabs via `/htmlview`, fetch each as CSV via `/gviz/tq?tqx=out:csv&gid={GID}`. Always capture all sheets including empty ones.
    - **`--raw` flag:** Copy directory as-is (no digesting).
 
-6. **Extract requirements** (for document sources): Parse `.md` files for actionable requirements. Save to `{source}/requirements.yaml` with IDs (REQ-001, ...), types (functional/business_rule/constraint/adjustment/decision), domains, confidence.
+7. **Extract requirements** (for document sources): Parse `.md` files for actionable requirements. Save to `{source}/requirements.yaml` with IDs (REQ-001, ...), text, types (functional/business_rule/constraint/adjustment/decision), domains, confidence, source_ref (traceability reference back to source material), and status (default: `active`; set to `superseded` if a later requirement overrides it).
 
-7. **Validate coverage:** Re-read source, check each section has at least one requirement. Re-extract for uncovered sections.
+8. **Validate coverage:** Re-read source, check each section has at least one requirement. Re-extract for uncovered sections.
 
-8. **Resolve conflicts** (if multiple sources): Compare requirements by domain, resolve contradictions using priority: decision > adjustment > latest timestamp. Save to `conflicts.yaml`.
+9. **Resolve conflicts** (if multiple sources): Compare requirements by domain, resolve contradictions using priority: decision > adjustment > latest timestamp. Save to `conflicts.yaml`.
 
-9. **Re-read state.yaml** to get current values. **Validate** that `focus.release` still matches the resolved release from step 1 — if not, clean up the source directory created in step 4 (remove `intake/{version}/{source}/`), then error: "Release focus changed during capture. Re-run `/yolo:intake capture`."
+10. **Validate total size:** Calculate cumulative size of all files in the current intake version directory. If total exceeds 100 MB, clean up the source directory created in step 5 and error: "Intake version exceeds 100 MB size limit. Remove large sources or start a new version."
 
-10. **Update manifest.yaml:** Add source entry with name, captured_at, file count, source_category.
+11. **Re-read state.yaml** to get current values. **Validate** that `focus.release` still matches the resolved release from step 1 — if not, clean up the source directory created in step 5 (remove `intake/{version}/{source}/`), **restore `conflicts.yaml`** to its pre-capture state if it was modified in step 9 (revert additions from this capture), then error: "Release focus changed during capture. Re-run `/yolo:intake capture`." **Re-read release.yaml** to verify release status is still `pending` or `active` and `intake.locked` is still `false` — if release was completed or intake locked since step 1, clean up the source directory and restore `conflicts.yaml`, then error: "Release was completed or intake locked during capture. Re-run `/yolo:intake capture`."
 
-11. **Generate summary.yaml:** Content hints, entities mentioned, priority domains. Saved to `intake/{version}/summary.yaml`.
+12. **Update manifest.yaml:** Add source entry with name, captured_at, file count, source_category. **Update release.yaml:** Set `updated_at` to current timestamp (intake is release-scoped, so release metadata should reflect the change).
 
-12. **Update state.yaml:** `updated_at`, `session.last_action` (describe what was captured), `session.resume` (current context for session continuity).
+13. **Generate summary.yaml (optional):** Content hints, entities mentioned, priority domains. Saved to `intake/{version}/summary.yaml`. Human-readable summary — not consumed by downstream agents.
 
-13. **Report** with source count, requirements extracted, conflicts resolved.
+14. **Clean up advisory lock:** Remove `.planning/releases/{id}/intake/.capture-in-progress` file. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Update `releases[].intake.current` to match `release.yaml` `intake.current` (keep state.yaml cache in sync). Update `updated_at`, `session.last_action` (describe what was captured), `session.resume` (current context for session continuity).
+
+15. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: intake capture {source} for release {id}"`.
+
+16. **Report** with source count, requirements extracted, conflicts resolved.
 
 ### Digest Format
 
@@ -110,9 +116,9 @@ Add local files or directories as `.md` digests. Never copies raw files — alwa
 
 5. **Extract requirements** (for non-code-project sources).
 
-6. **Update manifest.yaml** and **generate summary.yaml**.
+6. **Update manifest.yaml** and optionally **generate summary.yaml**.
 
-7. **Re-read state.yaml** to get current values, then update `updated_at`, `session.last_action` (describe what was added), `session.resume` (current context for session continuity). **Git commit**.
+7. **Re-read state.yaml** to get current values. **Re-validate:** Re-read `release.yaml` to verify release status is still `pending` or `active` and `intake.locked` is still `false` — if release was completed or intake locked, error: "Release was completed or intake locked during add. Re-run `/yolo:intake add`." Then update `updated_at`, `session.last_action` (describe what was added), `session.resume` (current context for session continuity). **Git commit**.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: yolo:feature
 description: Manage features within releases
-argument-hint: "[start|plan|verify|complete|status|add] [args] [--prompt] [--amend]"
+argument-hint: "[start|plan|verify|complete|status|add] [args] [--prompt] [--amend] [--force]"
 allowed-tools:
   - Read
   - Write
@@ -11,28 +11,29 @@ allowed-tools:
   - Grep
   - AskUserQuestion
   - Task
+  - ToolSearch
+  - WebSearch
+  - WebFetch
   - TeamCreate
   - TaskCreate
   - TaskUpdate
   - TaskList
   - TaskGet
   - SendMessage
-  - ToolSearch
-  - WebSearch
-  - WebFetch
+  - TeamDelete
 ---
 
 <objective>
 Manage features — release-scoped work units.
 
 **Subcommands:**
-- `/yolo:feature start <id>` — Full pipeline: research → plan → execute → verify-fix → verify → complete
+- `/yolo:feature start <id> [--force]` — Full pipeline: research → plan → execute → hook gate → verify → complete (`--force` bypasses missing dependency checks)
 - `/yolo:feature start <id> --prompt "<text>"` — Start with custom instructions
-- `/yolo:feature plan [--amend]` — Create or amend execution plan
-- `/yolo:feature verify` — Check success criteria
-- `/yolo:feature complete` — Mark feature complete, merge worktree
+- `/yolo:feature plan [--amend] [--force] [--prompt "<text>"]` — Create or amend execution plan (`--force` overrides researching recency check)
+- `/yolo:feature verify [--force]` — Check success criteria (auto-completes on pass; `--force` bypasses hook_gate_failed guard). Calling on in_progress skips hook gate
+- `/yolo:feature complete` — Mark feature complete, merge worktree (requires passed verification)
 - `/yolo:feature status [id]` — Show feature progress
-- `/yolo:feature add <name> --prompt "<goal>"` — Add a new feature to the active release
+- `/yolo:feature add <name> [--prompt "<goal>"]` — Add a new feature to the active release
 
 **Flow:**
 ```
@@ -62,10 +63,12 @@ Arguments: $ARGUMENTS
 - `verify` → Verify current feature
 - `complete` → Complete current feature
 - `status [id]` → Show feature progress (default if empty)
+- **else** → Error: "Unknown subcommand '{arg}'. Run `/yolo:help` for usage."
 
 Parse flags:
 - `--amend` → Amend existing plan (for `plan` subcommand)
-- `--prompt "<text>"` → Feature goal (required for `add`), custom instructions for research + planning
+- `--prompt "<text>"` → Feature goal (required for `add`), custom instructions for `start`, `plan`, and research + planning stages
+- `--force` → For `verify`: bypass `hook_gate_failed` guard. For `start`: bypass missing dependency checks. For `plan`: override researching recency check.
 
 Read `.claude/yolo/workflows/feature.md` and follow the matching subcommand section.
 

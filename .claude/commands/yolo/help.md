@@ -10,6 +10,10 @@ allowed-tools:
 Display help for YOLO commands. Without arguments: show overview. With argument: show command details.
 </objective>
 
+<execution_context>
+Self-contained command — no workflow or agent file. Read-only.
+</execution_context>
+
 <process>
 
 ## No Arguments — Overview
@@ -30,17 +34,18 @@ Releases:
   /yolo:release end [id]       Complete release
 
 Features:
-  /yolo:feature start <id> [--prompt]  Full pipeline (research → plan → execute → verify-fix → verify → complete)
-  /yolo:feature plan [--amend]        Create or amend execution plan
-  /yolo:feature verify                Check success criteria
-  /yolo:feature complete              Mark feature done
+  /yolo:feature start <id> [--prompt]  Full pipeline (research → plan → execute → hook gate → verify → complete)
+  /yolo:feature add <name> [--prompt]  Add new feature to active release
+  /yolo:feature plan [--amend] [--prompt]  Create or amend execution plan
+  /yolo:feature verify [--force]      Check success criteria (auto-completes on pass; --force bypasses hook_gate_failed guard). Calling on in_progress skips hook gate; accepts verify_failed for re-verification
+  /yolo:feature complete              Finalize feature, create summary (requires passed verify; normally auto-called)
   /yolo:feature status [id]           Show feature progress
 
 Intake (auxiliary context per release):
-  /yolo:intake capture <source> [url] [--raw]  Capture from 26 sources
-  /yolo:intake add <path> [--as <name>]       Add local files as .md digests
-  /yolo:intake list            List intake versions
-  /yolo:intake status          Show current version and stats
+  /yolo:intake capture <source> [url] [--raw] [--release <id>] [--prompt]  Capture from 26 sources
+  /yolo:intake add <path> [--as <name>] [--release <id>] [--prompt]      Add local files as .md digests
+  /yolo:intake list [-r <id>]  List intake versions
+  /yolo:intake status [-r <id>] Show current version and stats
 
 Other:
   /yolo:decide [question]      Design decision with multi-perspective analysis
