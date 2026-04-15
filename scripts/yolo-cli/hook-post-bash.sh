@@ -21,6 +21,12 @@
 # Exit 2 = reverts performed (blocks and informs Claude).
 set -euo pipefail
 
+# TEMPORARILY DISABLED — the diff-based enforcement was reverting pre-existing
+# dirty state that wasn't produced by the current bash command. Needs redesign
+# to take a pre-command snapshot and act only on the delta.
+# Exit 0 until the snapshot-based approach is wired in (see feature.md).
+exit 0
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
@@ -115,7 +121,7 @@ for action in "${REVERT_ACTIONS[@]}"; do
   esac
 done
 
-# Report what was reverted.
+# Report what was reverted and log each path.
 {
   echo "YOLO post-bash gate: reverted out-of-scope changes for feature '$SLUG'."
   echo ""
@@ -127,5 +133,9 @@ done
   echo "If this was intentional, add the paths to the plan's files: annotations"
   echo "or set YOLO_BYPASS=1 for this shell session."
 } >&2
+
+for p in "${OUT_OF_SCOPE[@]}"; do
+  audit_log "$REPO" "revert" "post-bash" "$SLUG" "$p" ""
+done
 
 exit 2
