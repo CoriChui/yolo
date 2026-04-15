@@ -1,6 +1,6 @@
 ---
 name: yolo:help
-description: Show available YOLO commands and usage guide
+description: Use when the user wants to list YOLO commands, learn what YOLO can do, or get details on a specific command.
 argument-hint: "[command]"
 allowed-tools:
   - Read
@@ -34,7 +34,7 @@ Releases:
   /yolo:release end [id]       Complete release
 
 Features:
-  /yolo:feature start <id> [--prompt]  Full pipeline (research → plan → execute → hook gate → verify → complete)
+  /yolo:feature start <id> [--prompt]  Full pipeline (research → plan → execute → review → hook gate → verify → complete)
   /yolo:feature add <name> [--prompt]  Add new feature to active release
   /yolo:feature plan [--amend] [--prompt]  Create or amend execution plan
   /yolo:feature verify [--force]      Check success criteria (auto-completes on pass; --force bypasses hook_gate_failed guard). Calling on in_progress skips hook gate; accepts verify_failed for re-verification
@@ -46,6 +46,12 @@ Intake (auxiliary context per release):
   /yolo:intake add <path> [--as <name>] [--release <id>] [--prompt]      Add local files as .md digests
   /yolo:intake list [-r <id>]  List intake versions
   /yolo:intake status [-r <id>] Show current version and stats
+
+Debugging:
+  /yolo:debug new <symptom> [--prompt]  Start a debug session (reproducer → root cause → failing test → fix)
+  /yolo:debug resume [id]      Resume an existing debug session
+  /yolo:debug list             List all debug sessions
+  /yolo:debug end <id>         Close a debug session
 
 Other:
   /yolo:decide [question]      Design decision with multi-perspective analysis

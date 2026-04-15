@@ -10,6 +10,7 @@ COMMIT_SH="$SCRIPT_DIR/commit.sh"
 RECONCILE_SH="$SCRIPT_DIR/reconcile.sh"
 RUN_TESTS_SH="$SCRIPT_DIR/run-tests.sh"
 VALIDATE_PLAN_SH="$SCRIPT_DIR/validate-plan.sh"
+VERIFY_SH="$SCRIPT_DIR/verify-commit.sh"
 
 PASS=0
 FAIL=0
@@ -61,7 +62,7 @@ TEST_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TEST_DIR"; }
 trap cleanup EXIT
 
-echo "=== Integration test: do→check→ship flow ==="
+echo "=== Integration test: do→check flow ==="
 echo "  Test repo: $TEST_DIR"
 echo ""
 
@@ -97,8 +98,12 @@ lint_commands: ["echo 'no lint errors'"]
 Integration test feature.
 
 ## Plan
-1. [ ] Add greeting function to app.js with unit test that verifies greeting returns expected string for given name input
-2. [ ] Add farewell function to app.js with unit test that verifies farewell returns expected goodbye string for given name
+1. [ ] Add greeting function to app.js with comprehensive unit test that verifies greeting returns the correct expected string for any given name input parameter
+  - test: app.test.js — greet returns correct string
+  - files: app.js, app.test.js
+2. [ ] Add farewell function to app.js with comprehensive unit test that verifies farewell returns the correct expected goodbye string for any given name parameter
+  - test: app.test.js — farewell returns correct string
+  - files: app.js, app.test.js
 
 ## Verification
 (Written by check step)
@@ -139,6 +144,14 @@ set -e
 
 assert_exit_code "task-1 commit succeeds" "0" "$rc_task1"
 
+# Verify task-1 commit
+set +e
+verify_output=$("$VERIFY_SH" task-1 "app.js,app.test.js" --repo "$TEST_DIR" 2>&1)
+rc_verify1=$?
+set -e
+
+assert_exit_code "verify-commit task-1 succeeds" "0" "$rc_verify1"
+
 # ── Step 2: DO — task-2 commit ───────────────────────────────────────
 
 echo ""
@@ -177,6 +190,14 @@ set -e
 
 assert_exit_code "task-2 commit succeeds" "0" "$rc_task2"
 
+# Verify task-2 commit
+set +e
+verify_output=$("$VERIFY_SH" task-2 "app.js,app.test.js" --repo "$TEST_DIR" 2>&1)
+rc_verify2=$?
+set -e
+
+assert_exit_code "verify-commit task-2 succeeds" "0" "$rc_verify2"
+
 # ── Step 3: Reconcile with --fix ─────────────────────────────────────
 
 echo ""
@@ -210,7 +231,7 @@ echo ""
 echo "=== Step 5: run-tests (run-tests.sh) ==="
 
 set +e
-run_tests_output=$("$RUN_TESTS_SH" "$FEATURE_FILE" --workdir "$TEST_DIR" 2>&1)
+run_tests_output=$("$RUN_TESTS_SH" "$FEATURE_FILE" --repo "$TEST_DIR" 2>&1)
 rc_run_tests=$?
 set -e
 
@@ -253,6 +274,36 @@ assert_contains \
   "reconcile reports no drift after fix" \
   "No drift detected" \
   "$step_output"
+
+# ── Step 9: Ship — squash merge to main ──────────────────────────────
+
+echo ""
+echo "=== Step 9: ship — squash merge to main ==="
+
+# Switch to main and squash merge
+git -C "$TEST_DIR" checkout -q main
+
+set +e
+git -C "$TEST_DIR" merge --squash feature/test-feature 2>&1
+merge_rc=$?
+set -e
+
+assert_exit_code "squash merge succeeds" "0" "$merge_rc"
+
+# Commit the squash using commit.sh
+set +e
+squash_output=$("$COMMIT_SH" squash "Add greeting functions" --repo "$TEST_DIR" --stage 2>&1)
+rc_squash=$?
+set -e
+
+assert_exit_code "squash commit succeeds" "0" "$rc_squash"
+
+# Verify the squash commit message has the [squash] prefix
+set +e
+last_msg=$(git -C "$TEST_DIR" log -1 --format='%s' 2>&1)
+set -e
+
+assert_contains "squash commit has [squash] prefix" "[squash]" "$last_msg"
 
 # ── Summary ──────────────────────────────────────────────────────────
 

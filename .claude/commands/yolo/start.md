@@ -12,10 +12,9 @@ allowed-tools:
   - AskUserQuestion
   - Task
   - ToolSearch
-  - TaskCreate
-  - TaskUpdate
-  - TaskGet
-  - SendMessage
+  - Skill
+  - WebSearch
+  - WebFetch
 ---
 
 <objective>

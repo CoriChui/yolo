@@ -1,6 +1,6 @@
 ---
 name: yolo:intake
-description: Capture and manage auxiliary intake materials from 26 source types
+description: Use when you need to pull external context into the active release — Figma, Notion, Linear, Jira, Confluence, GitHub, GDocs, database schemas, OpenAPI/GraphQL specs, PDFs, local code projects, and 15+ other sources. Intake feeds research and planning agents.
 argument-hint: "[capture|add|list|status] [args] [--raw|--as|--release|--prompt]"
 allowed-tools:
   - Read

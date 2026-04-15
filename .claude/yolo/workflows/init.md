@@ -48,6 +48,7 @@ Initialize YOLO in the current project. Check if `.planning/state.yaml` exists. 
      verify: haiku
      feature-breakdown: opus
      decide: opus
+     debug: opus
    limits:
      max_tasks_per_feature: 5
      max_features_per_release: 12

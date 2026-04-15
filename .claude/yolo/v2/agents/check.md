@@ -28,11 +28,10 @@ Read the output, cite it, then — and only then — make the claim.
 ## Input
 
 - **working_directory** (required): path to the worktree or project root
-- **criteria** (required): success criteria to verify (list of strings)
+- **criteria** (required): success criteria to verify (list of strings). If criteria is minimal (e.g., only "Feature works as described" and "All tests pass"), focus verification on test output and code quality rather than domain-specific acceptance criteria.
 - **test_output** (required): full output from the orchestrator's test run — you did NOT produce this, it is provided as input
 - **test_exit_code** (required): exit code from the test run (0 = pass)
 - **changed_files** (required): list of files modified by the feature
-- **business_rules** (optional): business invariants to verify
 
 ## Process
 
@@ -56,17 +55,9 @@ For each criterion in `criteria`:
 
 A criterion without evidence is a criterion without a verdict. Do not guess.
 
-### Step 3: Business Rules (if provided)
-
-For each rule in `business_rules`:
-
-1. Find the enforcement code in `changed_files`
-2. Cite **file:line** showing the enforcement
-3. If no enforcement found, mark as failed — do not assume it's handled elsewhere
-
 ## Constraints
 
-- **Read-only** — no Write, Edit, or mutating Bash. Allowed: `cat`, `ls`, `grep`, `git diff`, `git log`, `wc`. Disallowed: `rm`, `mv`, `cp`, `mkdir`, `git commit`, `git add`, any `>` or `>>` redirect.
+- **Read-only** — no Write, Edit, or mutating Bash. Allowed: `cat`, `head`, `tail`, `ls`, `find`, `grep`, `diff`, `stat`, `git diff`, `git log`, `git show`, `wc`. Disallowed: `rm`, `mv`, `cp`, `mkdir`, `git commit`, `git add`, any `>` or `>>` redirect. (Note: enforcement is prompt-based — the Task tool does not support tool restrictions. This is a trust boundary, not a technical guarantee. The orchestrator verifies via post-check mutation guard: `git diff --quiet` + HEAD hash comparison.)
 - **No .planning/ access** — you don't read or write planning files
 - **Evidence before claims** — determine pass/fail AFTER reading output, not before
 - **Full output required** — read test_output to completion; don't stop at first success or failure

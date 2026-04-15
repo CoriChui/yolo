@@ -9,7 +9,7 @@ Read `.planning/state.yaml` before any mutating operation. Validate it exists an
 
 ## /feature start <id> [--force] [--prompt "<text>"]
 
-Full pipeline: research → plan → execute → hook gate → verify → complete.
+Full pipeline: research → plan → execute → review → hook gate → verify → complete.
 
 **Mandatory:** Every feature MUST create a git worktree, implement changes there, ensure all lint and test checks pass (including any pre-commit hooks), and commit changes. This project may have pre-commit hooks configured with linting and tests. All lint errors and test failures must be resolved before completing.
 
@@ -28,7 +28,7 @@ Full pipeline: research → plan → execute → hook gate → verify → comple
    - If feature is already `verifying`: re-validate `depends_on` (all must be `completed`). **Worktree check:** Verify worktree exists at `{worktree_dir}` — if missing, error: "Worktree was removed while feature was in 'verifying'. Recreate from branch?" via AskUserQuestion. If approved and branch exists, recreate via `git worktree add "$WORKTREE_DIR" "feature/${feature_id}"`. If branch doesn't exist, reset to `pending` and restart from Phase 1. **Staleness check:** if `updated_at` is older than 2 hours, warn user: "Feature has been in 'verifying' since {updated_at} — it may be stuck. Re-verify or reset?" via AskUserQuestion. **Check prior verification:** if `verification.md` does not exist, warn user: "Verification may have been interrupted (no verification.md found). Re-running verification." If `verification.md` exists and contains `passed: false`, inform user: "Prior verification failed with these issues: {summary}. Re-running verification." via AskUserQuestion — user can choose to re-verify or fix issues first. **Update feature.yaml:** Set `updated_at: {timestamp}`. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `focus.feature`, `updated_at`, `session.last_action: "Resuming feature {id} from verifying"`, `session.resume`. Resume from Phase 5
    - If feature is `hook_gate_failed`: re-validate `depends_on` — if any dependency is no longer `completed`, reject resume with error: "Dependency {id} is no longer completed. Fix dependencies before resuming: /yolo:feature start {dep_id}." **Worktree check:** Verify worktree exists at `{worktree_dir}` — if missing, error: "Worktree was removed while feature had hook_gate_failed. Recreate from branch?" via AskUserQuestion. If approved and branch exists, recreate. If branch doesn't exist, reset to `pending` and restart. **Retry escalation:** Check `previous_failure` — if it is already `hook_gate_failed` (meaning this is at least the 2nd consecutive retry), warn user: "Hook gate has failed multiple times. Consider: (1) `/yolo:feature verify --force` to bypass hook gate, or (2) fix issues manually in the worktree at {worktree_dir}." via AskUserQuestion. User can choose to continue retry, bypass via --force, or stop. Update feature.yaml: Set `previous_failure: hook_gate_failed`, `updated_at` (keep `status: hook_gate_failed` — Phase 4 will set the appropriate status on success or failure). **Note:** This is intentionally asymmetric with `verify_failed` resume (which sets `status: in_progress`) — `hook_gate_failed` lets Phase 4 handle the status transition internally. Re-read `state.yaml` to get current values before writing. Update state.yaml: Set `focus.feature`, `updated_at`, `session.last_action: "Resuming feature {id} from hook_gate_failed"`, `session.resume`. Resume from Phase 4 (hook gate)
    - If feature is `verify_failed`: re-validate `depends_on` — if any dependency is no longer `completed`, reject resume with error: "Dependency {id} is no longer completed. Fix dependencies before resuming: /yolo:feature start {dep_id}." **Worktree check:** Verify worktree exists at `{worktree_dir}` — if missing, error: "Worktree was removed while feature had verify_failed. Recreate from branch?" via AskUserQuestion. If approved and branch exists, recreate. If branch doesn't exist, reset to `pending` and restart. **Retry escalation:** Read `verify_retry_count` from `feature.yaml` (default 0 if field missing). Increment `verify_retry_count` and write back to `feature.yaml`. If `verify_retry_count >= 3`, warn user: "Verification has failed {count} times. Consider: (1) `/yolo:feature verify --force` to bypass verification, (2) manually fix issues in the worktree at {worktree_dir}, or (3) reset feature to pending and re-plan." via AskUserQuestion. User can choose to continue retry, bypass, reset-and-replan, or stop. If user chooses reset-and-replan: reset feature.yaml to `status: pending`, `started_at: null`, `previous_failure: null`, `branch_point: null`, `research_skipped: false`, `verify_retry_count: 0`, `tasks.total: 0`, `tasks.completed: 0`, `tasks.completed_ids: []`, `tasks.current: null`; delete `plan.md` and `features/{id}/research.md` if they exist; clean up worktree and branch; stop pipeline. Update feature.yaml `status: in_progress`, `previous_failure: verify_failed`, and `updated_at`. **Note (asymmetry with hook_gate_failed resume):** `verify_failed` sets status to `in_progress` before Phase 4, while `hook_gate_failed` keeps its status and lets Phase 4 manage transitions. This means a crash between this status update and Phase 4 entry leaves the feature as `in_progress` with `previous_failure: verify_failed` — the in_progress resume handler (above) routes this correctly to Phase 4 via the `previous_failure` check. Re-read `state.yaml` to get current values before writing. Update state.yaml: Set `focus.feature`, `updated_at`, `session.last_action: "Resuming feature {id} from verify_failed"`, `session.resume`. Resume from Phase 4 (fixes need re-validation by hooks)
-   - If feature is `pending`: all `depends_on` features must be `completed`. **Bypass check:** If any completed dependency has `bypass_reason` set, warn: "Dependency {id} was force-completed: {bypass_reason}. Its code changes may not be on main. Proceed?" via AskUserQuestion. **Unmerged worktree check:** For each completed dependency with `bypass_reason` set, check if a worktree still exists at the expected path (`../.${REPO_NAME}-worktrees/${dep_feature_id}`). If it does, additionally warn: "Dependency {id} has an unmerged worktree at {path}. Its code changes are NOT on main. Consider merging manually before proceeding." via AskUserQuestion.
+   - If feature is `pending`: all `depends_on` features must be `completed`. **Bypass check:** If any completed dependency has `bypass_reason` set: (1) **Merge verification (mandatory):** Run `git merge-base --is-ancestor "feature/${dep_feature_id}" main` to check if the dependency's branch has been merged to main. If the branch does not exist or the command fails, also check if the dependency's worktree exists at `../.${REPO_NAME}-worktrees/${dep_feature_id}`. (2) **If merged (branch is ancestor of main):** warn: "Dependency {id} was force-completed ({bypass_reason}) but its code IS on main. Proceeding." No user prompt needed. (3) **If NOT merged:** error: "Dependency {id} was force-completed ({bypass_reason}) and its code is NOT on main. This feature may fail due to missing code from the dependency. Options: (a) Merge dependency manually: `git merge --no-ff feature/${dep_feature_id}`, then proceed, (b) Use `--force` to bypass this check, (c) Stop and fix." via AskUserQuestion. If user chooses (c) or rejects, stop. **Unmerged worktree check:** For each unmerged dependency, if a worktree exists at `../.${REPO_NAME}-worktrees/${dep_feature_id}`, additionally note: "Worktree with unmerged changes exists at {path}." **`--force` flag:** If `--force` is set, skip the merge verification and warn: "Bypassing dependency merge check via --force."
    - **Else** (unknown status value): error: "Unknown feature status: {status}. feature.yaml may be corrupted."
    - **Dependency validation:** When checking `depends_on`, if a referenced feature's directory or `feature.yaml` does not exist, error: "Dependency {id} not found — it may have been removed. Update `depends_on` in feature.yaml to remove stale references, or use `/yolo:feature start {id} --force` to bypass missing dependency checks." **`--force` flag handling:** If `--force` is set, skip all `depends_on` validation (both existence and completion checks). Warn user: "⚠ Bypassing dependency checks via --force. Unmet dependencies may cause issues." via AskUserQuestion. If rejected, stop.
 
@@ -46,6 +46,18 @@ Full pipeline: research → plan → execute → hook gate → verify → comple
    ```
    **Store branch point:** Write `branch_point: "{BRANCH_POINT}"` to feature.yaml — used for accurate diffs in Phase 5 and `/feature verify`.
 
+   **Baseline test verification:** After worktree creation, run the project's test suite in the worktree to establish a clean baseline:
+   ```bash
+   cd "$WORKTREE_DIR"
+   # Auto-detect and run project tests
+   # Node.js: npm test / pnpm test
+   # Rust: cargo test
+   # Python: pytest
+   # Go: go test ./...
+   ```
+   - **If tests pass:** Record baseline: "Baseline: {N} tests passing, 0 failures." Proceed.
+   - **If tests fail:** Report failures prominently: "⚠ Baseline tests failing in worktree — {N} failures detected BEFORE any feature work. These are pre-existing failures, not caused by this feature." Present to user via AskUserQuestion: "(1) Proceed anyway — pre-existing failures will be excluded from verification, (2) Stop and fix baseline first." If user proceeds, record `baseline_failures` count in feature.yaml for Phase 5 reference. If user stops, clean up worktree and branch, reset feature to `pending`, stop pipeline.
+
 6. **Update feature.yaml:** Re-read `feature.yaml` to confirm status is still `pending` — if status has changed, error: "Feature status changed during start. Another session may have started this feature." Set `status: researching`, `started_at: {timestamp}`, `updated_at: {timestamp}`.
    **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Validate that `focus.release` matches the feature's `release` field from `feature.yaml` — if mismatch, update `focus.release` to match. Set `focus.feature`, `updated_at`, `session.last_action`, `session.resume`.
 
@@ -53,7 +65,7 @@ Full pipeline: research → plan → execute → hook gate → verify → comple
 
 Follow `/feature plan` process below. Skip if plan.md already exists — in that case:
 1. **Validate research exists (if status is `researching`):** Check for release `research.md` or feature-level `features/{id}/research.md`. If neither exists and `research_skipped` is not `true`, warn user: "Plan exists but no research output found. The plan may be based on incomplete context. Re-plan with research? Or proceed with existing plan?" via AskUserQuestion. If user chooses re-plan, delete plan.md and re-run Phase 2 from research step.
-   Validate plan.md has parseable YAML with a `tasks:` array and task count matches `feature.yaml` `tasks.total`. **Combined invariant + validation check:** Collect all inconsistencies before prompting the user — present them in a single AskUserQuestion: (a) If `status` is `pending` and plan.md exists: "Plan exists but feature is pending — inconsistent." (b) If `tasks.total` is 0 but plan.md has tasks: "Task count is 0 but plan has {N} tasks." (c) If plan.md is older than 24 hours: "Plan was created over 24 hours ago and may be based on outdated research." Present all applicable issues together: "Found {N} inconsistencies: {list}. Use existing plan anyway, or delete and re-plan?" via AskUserQuestion. If user accepts, update `tasks.total` from plan.md task count. If rejected, delete plan.md and re-plan. If `plan.md` is missing but `tasks.total > 0`, warn user: "Feature has task count but no plan. Resetting task counters before proceeding." Reset `tasks.total` to 0, `tasks.completed` to 0, and `completed_ids` to `[]`.
+   Validate plan.md has parseable YAML with a `tasks:` array and task count matches `feature.yaml` `tasks.total`. **Combined invariant + validation check:** Collect all inconsistencies before prompting the user — present them in a single AskUserQuestion: (a) If `status` is `pending` and plan.md exists: "Plan exists but feature is pending — inconsistent." (b) If `tasks.total` is 0 but plan.md has tasks: "Task count is 0 but plan has {N} tasks." (c) If plan.md is older than 24 hours: "Plan was created over 24 hours ago and may be based on outdated research." Present all applicable issues together: "Found {N} inconsistencies: {list}. Use existing plan anyway, or delete and re-plan?" via AskUserQuestion. If user accepts, **immediately** update `tasks.total` in `feature.yaml` from plan.md task count, update `updated_at`, and persist the write to disk before proceeding to step 2 — do NOT defer this write to the step 2 status transition. This ensures a crash between acceptance and the status transition still preserves the corrected task count. If rejected, delete plan.md and re-plan. If `plan.md` is missing but `tasks.total > 0`, warn user: "Feature has task count but no plan. Resetting task counters before proceeding." Reset `tasks.total` to 0, `tasks.completed` to 0, and `completed_ids` to `[]`.
 2. **Re-read feature.yaml** to confirm current status. Only `pending`, `researching`, `planning`, or `in_progress` may transition here — if status is `completed`, `hook_gate_failed`, or `verify_failed`, reject with error (failure statuses must be handled by the resume logic in Phase 1, not the Phase 2 skip path). If status is `planning`, require user re-approval of the existing plan before advancing (present plan summary, ask approve/reject/amend). If status is not `in_progress`, Update feature.yaml: Set `status: in_progress`, `updated_at: {timestamp}`.
    **Worktree check:** Verify worktree exists at `{worktree_dir}`. If missing, error: "Worktree was removed. Recreate from branch or reset to pending before proceeding." Offer to recreate via AskUserQuestion.
 3. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Update `updated_at`, `session.last_action`, and `session.resume` (always — regardless of whether status changed).
@@ -65,7 +77,7 @@ Follow `/feature plan` process below. Skip if plan.md already exists — in that
 
 1. **Parse tasks** from plan.md (YAML `tasks:` array).
 
-2. **Validate focus:** Re-read `feature.yaml` and `state.yaml`. Confirm `focus.feature` still matches this feature. If not, abort with error: "Feature focus has changed. Restart with `/yolo:feature start <id>`."
+2. **Validate focus and status (Phase 3 entry guard):** Re-read `feature.yaml` and `state.yaml`. Confirm both: (a) `focus.feature` still matches this feature, AND (b) `feature.yaml` `status` is still `in_progress`. If either check fails, abort with error: "Phase 3 entry guard failed — expected focus={feature_id}, status=in_progress; got focus={state.focus.feature}, status={feature.status}. Restart with `/yolo:feature start <id>`."
 
 3. **Create agent team** via TeamCreate.
 
@@ -84,6 +96,36 @@ Follow `/feature plan` process below. Skip if plan.md already exists — in that
 7. **Shutdown teammates** when all tasks done.
 
 8. **Clean up team** via TeamDelete to remove team and task directories. **Reset `tasks.current`:** Set `tasks.current: null` in `feature.yaml` and update `updated_at`. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `updated_at`, `session.last_action: "All tasks completed for feature {id}"`, `session.resume: "Proceeding to hook gate (Phase 4)"`.
+
+### Phase 3b: Review (spec compliance + code quality)
+
+After execution completes, review the implementation before proceeding to the hook gate. This two-stage review catches spec drift and quality issues early — before hooks fire and before the verify agent runs.
+
+1. **Phase 3b entry guard:** Re-read `feature.yaml` and verify `status == 'in_progress'`. If status has changed unexpectedly (e.g., a concurrent session mutated it between Phase 3 shutdown and Phase 3b entry), abort with error: "Phase 3b entry guard failed — expected status=in_progress, got status={feature.status}. Restart with `/yolo:feature start <id>`." Then **determine changed files:** Run `git diff --name-only {branch_point}..HEAD` in the worktree.
+
+2. **Stage 1 — Spec compliance review:** Spawn a review agent (model from `config.yaml` `agents.verify`) via Task tool. The reviewer checks whether the implementation matches the feature's `success_criteria` from `feature.yaml`:
+   - For each criterion: is it addressed by the code changes? Point to specific files/lines.
+   - Are there changes that go beyond the criteria (scope creep)?
+   - Are there criteria with no corresponding implementation?
+   
+   Output: `spec_compliant: true/false`, list of gaps or extras.
+   
+   **If not spec-compliant:** Present gaps to user: "Spec compliance review found {N} issues: {list}. (1) Fix now — spawn execute agent to address gaps, (2) Accept and proceed, (3) Stop pipeline." If fixing, spawn execute agent with specific fix instructions, then re-run Stage 1. Loop until compliant or user accepts.
+
+3. **Stage 2 — Code quality review:** Spawn a review agent (model from `config.yaml` `agents.plan` — uses a more capable model for judgment calls) via Task tool. The reviewer examines the diff for:
+   - Code quality: naming, structure, readability
+   - Pattern adherence: does the code follow existing codebase patterns?
+   - Error handling: are errors handled appropriately at system boundaries?
+   - Obvious bugs: off-by-one, null checks, race conditions
+   - Security: injection, XSS, hardcoded secrets
+   
+   Output: `approved: true/false`, list of issues with severity (error/warning/info).
+   
+   **If not approved (error-severity issues):** Present issues to user: "Code quality review found {N} issues: {list}. (1) Fix now — spawn execute agent, (2) Accept and proceed, (3) Stop pipeline." If fixing, spawn execute agent with specific fix instructions, then re-run Stage 2. Loop until approved or user accepts.
+
+4. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `updated_at`, `session.last_action: "Review passed for feature {id}"`, `session.resume: "Proceeding to hook gate (Phase 4)"`.
+
+**Note:** During `/release run` (automated pipeline), review issues at warning severity or below are logged but do not block. Only error-severity issues pause the pipeline. This prevents automated runs from stalling on style nits.
 
 ### Phase 4: Hook gate
 
@@ -123,6 +165,23 @@ Follow `/feature plan` process below. Skip if plan.md already exists — in that
    Stop pipeline.
 
 ### Phase 5: Verify (verify agent)
+
+> **Evidence Iron Law (orchestrator-level gate).** You may not transition a feature to `completed` based on your own assessment of the work. The only acceptable evidence is the verify agent's `passed: true` output, gathered IN THIS RESPONSE, with its `results[]` written to `verification.md`. Even if you personally reviewed the code in Phase 3b and it "looks correct", you must still run Phase 5 to completion. Skipping, shortcutting, or interpreting partial output as "good enough" is a pipeline failure.
+>
+> **Rationalizations to reject:**
+> - "Phase 3b review already checked this" → Review is spec/quality; verify is evidence. Not substitutes.
+> - "The hook gate passed in Phase 4, so tests must pass" → Hooks run a subset of checks. Verify runs the full suite against success criteria.
+> - "The verify agent returned `passed: true` earlier, I can reuse it" → Only if `previous_failure` is `null` and `status` was already `verifying`. Otherwise: fresh run required.
+> - "Most criteria passed, I'll mark it completed and file the failing one as a follow-up" → No. `passed: false` is `passed: false`. File a new feature if needed.
+> - "The verify agent is slow, I'll skim the YAML" → Read every `results[]` entry. Read `rule_results[]` if present. A skipped entry is a silent acceptance of that criterion failing.
+>
+> **Gate check before writing `status: completed`:**
+> 1. Did you spawn the verify agent in this response? (Not "earlier", not "resumed from state" — in this response.)
+> 2. Did you read its full output YAML, including every `results[]` entry?
+> 3. Is `passed` literally `true`?
+> 4. Did you persist `verification.md` with the agent's `results` and `rule_results`?
+>
+> If ANY answer is no, you may not proceed to Phase 6.
 
 0. **Dependency re-validation:** Re-read `feature.yaml` and re-check `depends_on` — all dependencies must still be `completed`. If any dependency is no longer `completed`, abort with error: "Dependency {id} is no longer completed. Fix dependencies before verifying."
 
@@ -206,6 +265,7 @@ Add a new feature to the active release. Creates a `feature.yaml` with the same 
    research_skipped: false
    branch_point: null             # Commit hash at worktree creation — used for accurate diffs
    previous_failure: null         # Previous failure status (hook_gate_failed/verify_failed) preserved for diagnostics
+   baseline_failures: null        # Pre-existing test failures from Phase 1 baseline run — excluded from Phase 5 regression count
    status: pending
    created_at: "{timestamp}"
    started_at: null
@@ -256,7 +316,7 @@ Create plan.md for the current feature.
 
 1. **Check release status:** Read `release.yaml` for this feature's release. Release must be `active`. If `pending`, error: "Release not started. Run `/yolo:release start` first." If `completed`, error: "Release is completed."
 
-2. **Validate:** Feature must be `pending`, `researching`, or `planning` (or `in_progress`, `hook_gate_failed`, or `verify_failed` for `--amend`). If status is `hook_gate_failed` or `verify_failed` and NOT `--amend`: reject with error: "Feature has unresolved failures. Use `/yolo:feature start <id>` to resume, or `/yolo:feature plan --amend` to amend the plan." **If status is `researching` and not `--amend`:** **Recency check (skipped if `--force`):** If `--force` is not set: read `updated_at` from `feature.yaml` — if `updated_at` was modified within the last 5 minutes, reject with hard error: "Feature was updated {seconds}s ago — a research agent may be actively writing output. Wait for it to complete, or use `/yolo:feature plan --force` to override." If `--force` is set, skip the recency check and proceed. If `updated_at` is older than 5 minutes, warn user: "Feature is in 'researching' — a research agent may have been running in another session. Proceeding will override the research phase and transition to planning. Any in-flight research output may be lost. Continue?" via AskUserQuestion. If rejected, stop. **If status is `pending` and not `--amend`:** warn user: "Research has not been performed for this feature. Planning without research may produce a less informed plan. This may reduce plan quality. Continue?" via AskUserQuestion. If rejected, suggest `/yolo:feature start <id>` instead. If accepted, set `research_skipped: true` in `feature.yaml`. **If `--amend`:** verify that `plan.md` exists in the feature directory — if missing, error: 'No plan.md found to amend. Use `/yolo:feature plan` without --amend to create a new plan.' If `--amend` and status is `in_progress`, `hook_gate_failed`, or `verify_failed`: check that no teammates are actively executing (i.e., `tasks.completed == tasks.total`) — if tasks are still running, reject with error: "Cannot amend plan while tasks are being executed. Wait for execution to complete or restart the feature." **Circular dependency check:** Validate that this feature's `depends_on` does not create a cycle — build adjacency list from all features in the release and verify DAG (same algorithm as `/release start` step 9). If cycle detected, error: "Circular dependency detected: {cycle path}." Check that all features in `depends_on` are `completed`. If not, reject with error: "Cannot plan feature; unmet dependencies: {list}. Complete those features first." **Bypass check:** If any completed dependency has `bypass_reason` set, warn: "Dependency {id} was force-completed: {bypass_reason}. Its code changes may not be on main. Proceed?" via AskUserQuestion.
+2. **Validate:** Feature must be `pending`, `researching`, or `planning` (or `in_progress`, `hook_gate_failed`, or `verify_failed` for `--amend`). If status is `hook_gate_failed` or `verify_failed` and NOT `--amend`: reject with error: "Feature has unresolved failures. Use `/yolo:feature start <id>` to resume, or `/yolo:feature plan --amend` to amend the plan." **If status is `researching` and not `--amend`:** **Recency check (skipped if `--force`):** If `--force` is not set: read `updated_at` from `feature.yaml` — if `updated_at` was modified within the last 5 minutes, reject with hard error: "Feature was updated {seconds}s ago — a research agent may be actively writing output. Wait for it to complete, or use `/yolo:feature plan --force` to override." If `--force` is set, skip the recency check and proceed. If `updated_at` is older than 5 minutes, warn user: "Feature is in 'researching' — a research agent may have been running in another session. Proceeding will override the research phase and transition to planning. Any in-flight research output may be lost. Continue?" via AskUserQuestion. If rejected, stop. **If status is `pending` and not `--amend`:** warn user: "Research has not been performed for this feature. Planning without research may produce a less informed plan. This may reduce plan quality. Continue?" via AskUserQuestion. If rejected, suggest `/yolo:feature start <id>` instead. If accepted, set `research_skipped: true` in `feature.yaml`. **If `--amend`:** verify that `plan.md` exists in the feature directory — if missing, error: 'No plan.md found to amend. Use `/yolo:feature plan` without --amend to create a new plan.' If `--amend` and status is `in_progress`, `hook_gate_failed`, or `verify_failed`: check that no teammates are actively executing (i.e., `tasks.completed == tasks.total`) — if tasks are still running, reject with error: "Cannot amend plan while tasks are being executed. Wait for execution to complete or restart the feature." **Circular dependency check:** Validate that this feature's `depends_on` does not create a cycle — build adjacency list from all features in the release and verify DAG (same algorithm as `/release start` step 9). If cycle detected, error: "Circular dependency detected: {cycle path}." Check that all features in `depends_on` are `completed`. If not, reject with error: "Cannot plan feature; unmet dependencies: {list}. Complete those features first." **Bypass check:** If any completed dependency has `bypass_reason` set, run `git merge-base --is-ancestor "feature/${dep_feature_id}" main` to verify the dependency's code is on main. If NOT merged, error: "Dependency {id} was force-completed ({bypass_reason}) and its code is NOT on main. Merge dependency manually or use `--force` to bypass." via AskUserQuestion. If merged, proceed with info log only.
 
 3. **Check intake:** Load intake version from release for context.
 
@@ -284,10 +344,10 @@ Create plan.md for the current feature.
 
    **Extract lint/test commands:** After the plan agent returns, extract `lint_commands` and `test_commands` from the agent's output YAML. If discovered (non-empty arrays), persist them to `feature.yaml` as `lint_commands` and `test_commands` fields.
 
-7. **Write plan.md** with tasks, files, verification criteria, execution order.
+7. **Write plan.md** with tasks, files, verification criteria, execution order. **Update `updated_at`:** After plan.md is written to disk, update `feature.yaml` `updated_at: {timestamp}` to reflect actual plan completion time (the pre-agent write in step 5 records planning start; this write records planning end — improves stuck detection accuracy in `/yolo:status`).
 
 8. **Present for review:** User approves or rejects.
-   - Approved → **Create worktree** if not already created (standalone `/feature plan` without prior `/feature start`): follow the worktree creation steps from Phase 1 step 5 — specifically: compute `WORKTREE_DIR` and `BRANCH_POINT`, run `git worktree add`, and **write `branch_point: "{BRANCH_POINT}"` to feature.yaml** (critical for Phase 5 diff accuracy). **Important:** Worktree creation MUST succeed before writing `status: in_progress`. If worktree creation fails, leave status unchanged and error. **TOCTOU guard:** Re-read `feature.yaml` to confirm status is still `planning` — if status has changed, error: "Feature status changed during plan approval. Another session may have modified this feature." Update feature.yaml: Set `status: in_progress`, `updated_at: {timestamp}`, update task count. If `started_at` is null, also set `started_at: {timestamp}`. **Note:** The `researching` status is not set by standalone `/feature plan` — it is only set when `/feature start` runs the full pipeline. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `focus.feature: {feature_id}`, `updated_at`, `session.last_action: "Plan approved"`, `session.resume`. **Crash recovery note:** If a crash occurs between the feature.yaml write (`status: in_progress`) and this state.yaml write (`focus.feature`), the feature will be `in_progress` but unfocused. `/yolo:status` reconciliation detects this — the feature's `in_progress` status is preserved and the user can re-focus via `/yolo:feature start <id>`.
+   - Approved → **Create worktree** if not already created (standalone `/feature plan` without prior `/feature start`): follow the worktree creation steps from Phase 1 step 5 — specifically: compute `WORKTREE_DIR` and `BRANCH_POINT`, run `git worktree add`, and **write `branch_point: "{BRANCH_POINT}"` to feature.yaml** (critical for Phase 5 diff accuracy). **Important:** Worktree creation MUST succeed before writing `status: in_progress`. **On worktree creation failure (standalone `/feature plan` path — feature was `pending`):** (1) delete `plan.md` from the feature directory (it was written in step 7, this line), (2) clear `branch_point: null` in `feature.yaml` in case it was partially written, (3) leave `status: pending` unchanged, (4) update `feature.yaml` `updated_at`, (5) update `state.yaml` `updated_at`, `session.last_action: "Plan approval failed — worktree creation failed"`, `session.resume`, (6) error with: "Worktree creation failed ({error}). Plan discarded — feature remains `pending`. Retry with `/yolo:feature plan`." The feature is left in a clean, re-plannable state. **If the feature was already past `pending`** (e.g., resuming from `planning` where a worktree should already exist), do NOT delete plan.md — this failure path is only for the standalone `pending → in_progress` transition where plan.md is freshly written in this session. **TOCTOU guard:** Re-read `feature.yaml` to confirm status is still `planning` — if status has changed, error: "Feature status changed during plan approval. Another session may have modified this feature." Update feature.yaml: Set `status: in_progress`, `updated_at: {timestamp}`, update task count. If `started_at` is null, also set `started_at: {timestamp}`. **Note:** The `researching` status is not set by standalone `/feature plan` — it is only set when `/feature start` runs the full pipeline. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `focus.feature: {feature_id}`, `updated_at`, `session.last_action: "Plan approved"`, `session.resume`. **Crash recovery note:** If a crash occurs between the feature.yaml write (`status: in_progress`) and this state.yaml write (`focus.feature`), the feature will be `in_progress` but unfocused. `/yolo:status` reconciliation detects this — the feature's `in_progress` status is preserved and the user can re-focus via `/yolo:feature start <id>`.
    **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: plan feature {feature_id}"`.
    - Rejected → Update feature.yaml: Set `status: pending`, `started_at: null`, `updated_at: {timestamp}`, `research_skipped: false`, `previous_failure: null`, `research_retry_count: 0`, `verify_retry_count: 0`, `lint_commands: []`, `test_commands: []`, reset `tasks.total` and `tasks.completed` to 0, reset `completed_ids` to `[]`, set `tasks.current: null`. Delete plan.md, delete `features/{id}/research.md` if it exists (ensure clean slate on restart). **Clean up worktree and branch** if they exist (created in Phase 1 step 5, if applicable):
 1. Run `git worktree remove "{worktree_dir}" --force`. If this fails, warn user: "Worktree cleanup failed at {worktree_dir}. Manual cleanup required: `git worktree remove {worktree_dir} --force`." via AskUserQuestion — user must acknowledge before proceeding.
@@ -348,17 +408,31 @@ Verify feature meets success criteria. Use `--force` to bypass `hook_gate_failed
 
 ## /feature complete
 
-Mark feature as completed, merge worktree.
+Mark feature as completed. Presents completion options (merge, PR, keep, discard) unless running in automated mode.
 
 ### Process
 
 0. **Resolve feature:** Read `state.yaml`, resolve feature from `focus.feature`. If `focus.feature` is null, error: "No feature focused." Read the feature's `feature.yaml`.
 
-1. **Validate:** Feature must be `verifying`. If already `completed`, reject — terminal state cannot be re-completed. Note: `/feature complete` is always called as a sub-process of `/feature verify` (or `/feature start` Phase 6) in the single-threaded model — it is not intended for standalone concurrent use. Note: Force-completion from `in_progress` is only available via `/release end` (which always sets `bypass_reason`) — `/feature complete` requires verification to have passed. **Verify that `verification.md` exists** in the feature directory and contains `passed: true` (no blocker-severity failures). If `verification.md` is missing or contains blockers, reject with error: "Verification has not passed. Run `/yolo:feature verify` first." **Defense-in-depth:** Verify `tasks.completed == tasks.total` (and `tasks.total > 0`). If mismatch, warn: "Task count mismatch ({tasks.completed}/{tasks.total}). State may be corrupted. Proceed anyway?" via AskUserQuestion.
+1. **Validate:** Feature must be `verifying`. If already `completed`, reject — terminal state cannot be re-completed. Note: `/feature complete` is always called as a sub-process of `/feature verify` (or `/feature start` Phase 6) in the single-threaded model — it is not intended for standalone concurrent use. Note: Force-completion from `in_progress` is only available via `/release end` (which always sets `bypass_reason`) — `/feature complete` requires verification to have passed. **Verify that `verification.md` exists** in the feature directory and contains `passed: true` (no blocker-severity failures). If `verification.md` is missing or contains blockers, reject with error: "Verification has not passed. Run `/yolo:feature verify` first." **Defense-in-depth:** Verify `tasks.completed == tasks.total` (and `tasks.total > 0`). If mismatch, warn: "Task count mismatch ({tasks.completed}/{tasks.total}). State may be corrupted. Proceed anyway?" via AskUserQuestion. **Dependency re-validation (mirrors Phase 5 step 0):** Re-read `feature.yaml` and re-check `depends_on` — all dependencies must still be `completed`. Between `/feature verify` and `/feature complete`, a concurrent session (or manual YAML edit) could have changed a dependency's status. If any dependency is no longer `completed`, reject with error: "Dependency {dep_id} is no longer `completed` (now `{dep_status}`). Resolve the dependency first, then re-run `/yolo:feature verify` to restart verification before completing."
 
 2. **Create summary.md** in feature directory with: goal, success criteria results, business rule verification results (if available from `rule_results` in verification.md), tasks completed, files changed, verification outcome.
 
-3. **Verify branch and merge worktree:**
+3. **Present completion options:**
+
+   **Automated mode** (when `session.run_active` is `true` in state.yaml — running via `/release run`): Skip options, proceed directly with Option 1 (merge locally). This keeps automated pipeline runs non-interactive.
+
+   **Interactive mode** (all other cases): Present exactly these 4 options via AskUserQuestion:
+   ```
+   Implementation complete and verified. What would you like to do?
+
+   1. Merge back to {base_branch} locally (default)
+   2. Push and create a Pull Request
+   3. Keep the branch as-is (I'll handle it later)
+   4. Discard this work
+   ```
+
+   #### Option 1: Merge locally (default)
    Verify current branch is the base branch (e.g., main) — run `git branch --show-current` and confirm it matches the expected merge target. If not, error: "Not on expected base branch. Switch to the correct branch before completing."
    **Check branch existence:** Verify `feature/{feature_id}` branch exists (`git branch --list "feature/{feature_id}"`). If the branch does not exist but the worktree does, the merge may have already completed in a prior interrupted run — skip merge, proceed to step 4. If neither branch nor worktree exists, warn: "Feature branch and worktree already cleaned up. Proceeding to mark completed."
    ```bash
@@ -367,8 +441,52 @@ Mark feature as completed, merge worktree.
    git branch -d "feature/{feature_id}"
    ```
    If merge conflicts: stop, let user resolve, retry.
+   Proceed to step 4.
 
-4. **Update feature.yaml (atomic field computation):** First, read `previous_failure` from `feature.yaml` to compute `bypass_reason` before clearing. If `previous_failure` was `hook_gate_failed`, set `bypass_reason: "completed with hook gate bypassed via /feature verify --force"`. Then write all fields in a single update: `status: completed`, `completed_at: {timestamp}`, `updated_at: {timestamp}`, `tasks.current: null`, `previous_failure: null`, `bypass_reason: {computed value}`, `verify_retry_count: 0`, `research_retry_count: 0`, `run_failure_count: 0`. (Done after merge to avoid marking completed if merge fails.)
+   #### Option 2: Push and create PR
+   ```bash
+   cd "{worktree_dir}"
+   git push -u origin "feature/{feature_id}"
+   gh pr create --title "feat({feature_id}): {feature_title}" --body "$(cat <<'EOF'
+   ## Summary
+   {goal from feature.yaml}
+
+   ## Success Criteria
+   {success_criteria list}
+
+   ## Verification
+   All criteria verified — see verification.md for evidence.
+
+   ## Test Plan
+   - [ ] Review changed files
+   - [ ] Verify CI passes
+   EOF
+   )"
+   ```
+   **Keep worktree** (user may need it for PR review changes). Proceed to step 4 — mark as completed but note `completion_method: pr` in feature.yaml. Report PR URL to user.
+
+   #### Option 3: Keep as-is
+   Report: "Keeping branch `feature/{feature_id}`. Worktree preserved at `{worktree_dir}`."
+   **Do NOT clean up worktree or branch.** Proceed to step 4 — mark as completed with `completion_method: kept`.
+
+   #### Option 4: Discard
+   **Confirm first** via AskUserQuestion:
+   ```
+   This will permanently delete:
+   - Branch feature/{feature_id}
+   - All commits since branch_point
+   - Worktree at {worktree_dir}
+
+   Type 'discard' to confirm.
+   ```
+   Wait for exact confirmation. If not confirmed, return to options.
+   ```bash
+   git worktree remove "{worktree_dir}" --force
+   git branch -D "feature/{feature_id}"
+   ```
+   Update feature.yaml: Set `status: pending`, reset all progress fields (`started_at: null`, `tasks.total: 0`, `tasks.completed: 0`, `completed_ids: []`, `tasks.current: null`, `previous_failure: null`, `branch_point: null`). Delete plan.md, verification.md, summary.md, research.md if they exist. Update state.yaml: clear `focus.feature`, set `session.last_action: "Discarded feature {id}"`. **Git commit** and stop — do NOT proceed to step 4.
+
+4. **Update feature.yaml (atomic field computation):** First, read `previous_failure` from `feature.yaml` to compute `bypass_reason` before clearing. If `previous_failure` was `hook_gate_failed`, set `bypass_reason: "completed with hook gate bypassed via /feature verify --force"`. Then write all fields in a single update: `status: completed`, `completed_at: {timestamp}`, `updated_at: {timestamp}`, `tasks.current: null`, `previous_failure: null`, `bypass_reason: {computed value}`, `verify_retry_count: 0`, `research_retry_count: 0`, `run_failure_count: 0`, `completion_method: {merge|pr|kept}` (default: `merge`). (Done after merge to avoid marking completed if merge fails.)
 
 5. **Update release progress:** Re-read state.yaml to confirm `focus.release` still matches this feature's release ID — if mismatch, abort with error. Load release.yaml, **reconcile `features.completed`** by counting actual completed features from `features.list` (read each feature's `feature.yaml` status) rather than blindly incrementing the cached counter. Update `updated_at`, write back.
 
@@ -397,8 +515,8 @@ FEATURE STATUS: {id}
 LIFECYCLE
   pending → researching → planning → in_progress → verifying → completed
                                         ↓              ↓
-                                  hook_gate_failed  verify_failed
-                                                      ^ HERE
+                                  hook_gate_failed   verify_failed
+                                                     ^ HERE
 
 TASKS                                    {completed}/{total}
   [v] Task 1 title
@@ -420,7 +538,7 @@ NEXT STEP
 - Features are always release-scoped
 - Features can be added manually via `/yolo:feature add` — creates the same `feature.yaml` structure as the feature-breakdown agent
 - Each feature gets its own git worktree + branch
-- Pipeline: research → plan → execute → hook gate → verify → complete
+- Pipeline: research → plan → execute → review → hook gate → verify → complete
 - Individual commands (`/yolo:feature plan`, `/yolo:feature verify`, etc.) are override entry points for specific stages
 - Phase 3 commits use `--no-verify` to avoid hooks firing N times during parallel execution
 - Phase 4 (hook gate) is a single commit with hooks enabled — pre-commit hooks are the quality gate

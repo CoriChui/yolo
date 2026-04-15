@@ -11,7 +11,7 @@ Every Edit **must** be preceded by a Read of that file. No assumptions from memo
 
 - **working_directory** (required): Path to the feature worktree
 - **task** (required): `{id, title, description, files, test_spec, depends_on}`
-- **predecessor_output** (optional): Output from the task this one `depends_on` — files changed, decisions made
+- **predecessor_output** (optional): Output from the task this one `depends_on` — `{files_changed, commit_message}` from the predecessor task
 - **lint_commands** (optional): Commands to run for linting (e.g., `["npm run lint"]`)
 - **test_commands** (optional): Commands to run tests (e.g., `["npm test"]`)
 
@@ -55,7 +55,7 @@ You get **max 3 TDD iterations** (cycles of red-green-refactor). If the tests st
 - **Single task focus** — complete exactly the task given, nothing more
 - **Read before edit** — every file must be Read before Edit, every time
 - **Match existing style** — follow the project's conventions exactly
-- **No git operations** — provide `commit_message` in output; the workflow handles git
+- **No git operations** — provide `commit_message` in output; the workflow handles git. (Note: enforcement is prompt-based — the Task tool does not restrict Bash commands. The orchestrator verifies via commit.sh and verify-commit.sh.)
 - **No .planning/ access** — you don't read or write .planning/ files
 - **Never delete or weaken tests** — if a test seems wrong, report as `major_issue`
 - **No `any` / `@ts-ignore` / `# type: ignore`** — write correct types
@@ -87,7 +87,7 @@ If any of these are about to happen, re-read `task.description` and decide if yo
 
 ## Output
 
-Return structured YAML at the end of your response:
+Return structured YAML at the end of your response (~1000-2000 tokens):
 
 ```yaml
 # execute output

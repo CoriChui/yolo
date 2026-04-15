@@ -1,6 +1,6 @@
 ---
 name: yolo:init
-description: Initialize YOLO in current project
+description: Use when YOLO has never been set up in this project, or when `.planning/` is missing/corrupt and needs repair. Creates state.yaml, config.yaml, and the releases/decisions scaffolding.
 argument-hint: ""
 allowed-tools:
   - Read

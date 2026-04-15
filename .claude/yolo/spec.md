@@ -1,5 +1,9 @@
 # YOLO Specification
 
+> **DEPRECATED (v1):** This is the v1 specification. YOLO v2 is defined in
+> `docs/specs/2026-04-10-yolo-v2-design.md` and implemented in `.claude/yolo/v2/`.
+> This file is kept for reference only — do not use it for new development.
+
 ## Core Concepts
 
 ```
@@ -9,7 +13,7 @@ Codebase (truth)  +  Intake (auxiliary)  →  Release  →  Features  →  Outpu
 - **Codebase**: Actual code — primary source of truth
 - **Intake**: Optional external materials (Figma, GDocs, DB schemas, etc.) — release-scoped, stored as `.md` digests
 - **Release**: Container for a body of work — explores codebase, auto-creates features from research
-- **Feature**: Atomic work unit — goes through research → plan → execute → verify pipeline
+- **Feature**: Atomic work unit — goes through research → plan → execute → review → verify pipeline
 - **Output**: Documentation of what was built (visibility only)
 
 ## File Structure
@@ -20,6 +24,13 @@ Codebase (truth)  +  Intake (auxiliary)  →  Release  →  Features  →  Outpu
 ├── state.yaml                            # Project state
 ├── decisions/                            # Design decisions from /decide
 │   └── {slug}.md
+├── debug-sessions/                       # Debug sessions from /debug (independent of releases)
+│   └── {YYYY-MM-DD-slug}/                # Session directory
+│       ├── session.yaml                  # Session metadata (status, phase, hypothesis, fix_commit — schema below)
+│       ├── reproducer.md                 # Reproduction steps (Phase 1)
+│       ├── investigation.md              # Evidence chain (Phase 2)
+│       ├── hypothesis.md                 # Hypothesis + failing test plan (Phase 3)
+│       └── fix.md                        # Fix description + verification evidence (Phase 4/5)
 └── releases/
     └── {YYYY-MM-DD-slug}/                # Release directory
         ├── release.yaml                  # Goal, status, feature list
@@ -37,6 +48,7 @@ Codebase (truth)  +  Intake (auxiliary)  →  Release  →  Features  →  Outpu
         │   └── {NN-slug}/
         │       ├── feature.yaml
         │       ├── research.md           # Created during /feature plan (feature-level research, when release research.md doesn't cover the feature)
+        │       ├── research-output.yaml  # Created during /feature plan (structured research output for crash recovery; optional)
         │       ├── plan.md               # Created during /feature plan
         │       ├── verification.md       # Created during /feature verify
         │       └── summary.md            # Created during /feature complete
@@ -50,6 +62,7 @@ Codebase (truth)  +  Intake (auxiliary)  →  Release  →  Features  →  Outpu
 │   ├── intake.md
 │   ├── status.md
 │   ├── decide.md
+│   ├── debug.md
 │   └── help.md
 └── yolo/
     ├── spec.md                               # This file
@@ -59,14 +72,16 @@ Codebase (truth)  +  Intake (auxiliary)  →  Release  →  Features  →  Outpu
     │   ├── execute.md
     │   ├── verify.md
     │   ├── feature-breakdown.md
-    │   └── decide.md
+    │   ├── decide.md
+    │   └── debug.md
     └── workflows/                            # Workflow definitions
         ├── init.md
         ├── release.md
         ├── feature.md
         ├── intake.md
-        └── status.md
-# Note: /yolo:help is a lightweight command with no workflow file. /yolo:decide also has no workflow file — its multi-step process (agent spawn, state.yaml updates) is defined directly in the command file.
+        ├── status.md
+        └── debug.md
+# Note: /yolo:help is a lightweight command with no workflow file. /yolo:decide also has no workflow file — its multi-step process (agent spawn, state.yaml updates) is defined directly in the command file. /yolo:debug is a standard command-with-workflow-and-agent triple; debug sessions are independent of releases and persisted under `.planning/debug-sessions/{id}/`.
 # Ephemeral runtime artifacts (not tracked in git): .task-locks/ (in worktrees, for crash-safe task assignment), .capture-in-progress (advisory lock for intake captures)
 ```
 
@@ -133,6 +148,7 @@ pending → researching → planning* → in_progress → verifying → complete
    └────────────────────────┘  plan rejected: reset to pending
 
 * planning is skipped when resuming with an existing plan.md (researching → in_progress shortcut). If plan.md exists and status is `planning`, user re-approval is required before advancing. If plan.md exists and status is `pending`, user is warned of the inconsistency and can approve the existing plan (skips directly to in_progress, bypassing researching) or delete and re-plan. This pending → in_progress shortcut can occur when plan.md was manually placed, or when a prior plan rejection cleanup failed to delete plan.md.
+* **Stuck `planning` recovery:** If a feature is stuck in `planning` without `plan.md` (plan agent crashed), run `/yolo:feature start <id>` which detects the `planning` status, checks for `plan.md`, and re-runs the plan agent. `/yolo:status` also flags features in `planning` without `plan.md` as likely crashed (see status.md reconciliation step 2).
 * pending → planning is reachable via /feature plan override (skips research with user confirmation).
 * plan rejection resets status to pending (not researching), resets `research_skipped` to false, `started_at` to null, `previous_failure` to null, `research_retry_count` to 0, `verify_retry_count` to 0, `lint_commands` to `[]`, `test_commands` to `[]`, `tasks.total` and `tasks.completed` to 0, `completed_ids` to `[]`, and `tasks.current` to null. Also deletes `plan.md`, `features/{id}/research.md` (if exists), and cleans up worktree (`git worktree remove`) and branch (`git branch -d`) if they exist.
 * hook_gate_failed: pre-commit hooks could not be resolved. Re-run /feature start to resume from Phase 4, or /feature verify --force to bypass hook_gate_failed status guard. Status stays `hook_gate_failed` on resume — Phase 4 handles the transition to `verifying` (on success) or back to `hook_gate_failed` (on failure). This is intentionally asymmetric with `verify_failed` resume (hook_gate_failed keeps status unchanged to let Phase 4 manage transitions; verify_failed sets status to in_progress before re-entering Phase 4). After 2+ repeated hook_gate_failed retries, `/feature start` suggests using `/feature verify --force` to bypass or manual intervention.
@@ -156,17 +172,19 @@ pending → researching → planning* → in_progress → verifying → complete
 ```
 /yolo:feature start <id> [--force] [--prompt "<text>"]
     ↓
-Phase 1: Setup — create git worktree (branch: feature/{id}), store branch_point commit hash, set status: researching
+Phase 1: Setup — create git worktree (branch: feature/{id}), store branch_point commit hash, run baseline tests, set status: researching
     ↓
 Phase 2: Plan — [optional] research agent (model from config; agent spawn skipped if release research.md or feature-level features/{id}/research.md exists — existing research output is reused as plan agent input, or if `research_skipped` is true; when skipped, research.md content is passed as the plan agent's `context` input and `domain_entities`/`business_rules`/`integration_map` are populated from feature.yaml; feature-level research persisted to features/{id}/research.md; if research returns `open_questions` with `blocking: true`, present each to user for resolution before proceeding; resolved questions passed to plan agent as `resolved_questions` input) → plan agent (model from config) → tasks[]
     ↓
-Phase 3: Execute — Validate `config.yaml` `limits.max_teammates` >= 1 (error if missing or <= 0). If remaining_tasks == 0 after crash recovery (all tasks already completed), skip Phase 3 entirely and proceed directly to Phase 4 (hook gate). TeamCreate with execute agents (from config) as parallel teammates (count: min(remaining_tasks, config.yaml `limits.max_teammates`)); each agent receives the full task definition from plan.md (id, title, description, files, constraints, integration, intake_ref) plus domain context from CLAUDE.md files (discovery: walk up from each directory in `scope.directories` to the repository root, collecting all CLAUDE.md files found at each level, deduplicated by path; if `scope.directories` is empty, fall back to repository root `CLAUDE.md` only — this refers to `{repo_root}/CLAUDE.md`) → commit_message per task. After all tasks complete, set `tasks.current: null` in feature.yaml
+Phase 3: Execute — Validate `config.yaml` `limits.max_teammates` >= 1 (error if missing or <= 0). If remaining_tasks == 0 after crash recovery (all tasks already completed), skip Phase 3 entirely and proceed directly to Phase 3b (review). TeamCreate with execute agents (from config) as parallel teammates (count: min(remaining_tasks, config.yaml `limits.max_teammates`)); each agent receives the full task definition from plan.md (id, title, description, files, constraints, integration, intake_ref) plus domain context from CLAUDE.md files (discovery: walk up from each directory in `scope.directories` to the repository root, collecting all CLAUDE.md files found at each level, deduplicated by path; if `scope.directories` is empty, fall back to repository root `CLAUDE.md` only — this refers to `{repo_root}/CLAUDE.md`) → commit_message per task. After all tasks complete, set `tasks.current: null` in feature.yaml
+    ↓
+Phase 3b: Review — two-stage review of implementation: (1) spec compliance review checks changes against success_criteria for gaps and scope creep, (2) code quality review checks diff for patterns, bugs, security, and readability. Issues loop back to execute agent for fixes. During /release run, only error-severity issues block.
     ↓
 Phase 4: Hook gate — single commit with hooks enabled; if hooks fail, spawn execute agent to fix (agent has implicit turn limit from Task tool — if agent exhausts its turn limit without success, the Task tool returns with a failure result and the workflow proceeds to set `status: hook_gate_failed`). Accepts entry from `in_progress`, `hook_gate_failed`, or `verify_failed` statuses. Feature status remains unchanged during hook gate attempt; transitions to `verifying` on success or `hook_gate_failed` on failure
     ↓
-Phase 5: Verify — verify agent (model from config) with criteria, files (determined via `branch_point` for accurate diff), business_rules, lint_commands, test_commands → passed, results[], issues[], rule_results[] (if business_rules provided) (type_check_results is agent-internal, not consumed by workflows — must NOT be persisted to verification.md)
+Phase 5: Verify — verify agent (model from config) with criteria, files (determined via `branch_point` for accurate diff), business_rules, lint_commands, test_commands → passed, results[], issues[], rule_results[] (if business_rules provided) (type_check_results is agent-internal, not consumed by workflows — must NOT be persisted to verification.md). Evidence iron law: every pass/fail claim must be backed by fresh command output — no claims without evidence.
     ↓
-Phase 6: Complete — merge worktree, summary.md
+Phase 6: Complete — present completion options (merge locally, create PR, keep branch, discard); auto-merges during /release run. Creates summary.md.
 
 Note: Model names in the agent table below are config defaults from config.yaml `agents.*`. Workflows use config-driven model selection — always read config.yaml to get the actual model for each agent.
 ```
@@ -210,13 +228,14 @@ lint_commands: []                 # Discovered during Phase 2 planning (e.g., ["
 test_commands: []                 # Discovered during Phase 2 planning (e.g., ["npm test", "pytest"]). Persisted for Phase 5 verify agent. Empty if not discovered.
 branch_point: "abc123def"         # Commit hash at worktree creation — used for accurate diffs in Phase 5 and /feature verify (null before worktree creation)
 previous_failure: null            # Previous failure status preserved for diagnostics (hook_gate_failed/verify_failed) — set on resume from failure states
+baseline_failures: null           # Count of pre-existing test failures from Phase 1 baseline run. Null before Phase 1 runs or when baseline tests all passed. Integer count when user accepted pre-existing failures and chose to proceed. Referenced by Phase 5 verify agent to exclude pre-existing failures from the regression count.
 
 status: in_progress               # See lifecycle above
 created_at: 2026-02-05T10:00:00Z
 started_at: 2026-02-05T14:00:00Z
 completed_at: null
 updated_at: 2026-02-05T14:00:00Z
-bypass_reason: null                # Optional — set to "force-complete via /release end" when force-completed, or "completed with hook gate bypassed via /feature verify --force" when hook gate was bypassed. Workflows reading completed features should check this field to distinguish bypassed features from normally verified ones.
+bypass_reason: null                # Optional — set to "force-complete via /release end" when force-completed, or "completed with hook gate bypassed via /feature verify --force" when hook gate was bypassed. Semantics: (1) If set, the feature may have unvalidated code or unmerged changes. (2) Dependent features receive a mandatory merge verification check (`git merge-base --is-ancestor`) — if the bypassed feature's branch is not on main, the dependent cannot start without `--force`. (3) `/release run` logs features with bypass_reason set before running dependents.
 run_failure_count: 0               # Tracks retry count during /release run — incremented on each pipeline failure, read on resume via --from, reset to 0 on success or new run without --from
 research_retry_count: 0            # Tracks consecutive resumes from `researching` status — incremented on each resume, reset to 0 on successful transition or feature completion
 verify_retry_count: 0              # Tracks consecutive verify failures — incremented on each resume from `verify_failed`, reset to 0 on successful verification or feature completion
@@ -232,6 +251,68 @@ tasks:
 
 - Feature CANNOT start if any `depends_on` feature is not `completed`
 - Dependency eligibility is checked at pipeline start (Phase 1 preconditions) — no separate unblock mechanism
+- Features in `hook_gate_failed` or `verify_failed` status intentionally block dependent features (they are not `completed`). To unblock: fix and complete the feature, or force-complete via `/release end`
+- Features with `bypass_reason` set (force-completed or hook gate bypassed): dependents receive a mandatory merge verification check — the workflow verifies the dependency's branch is an ancestor of main via `git merge-base --is-ancestor`. If not merged, the dependent cannot start without `--force`
+
+## Debug Session Lifecycle
+
+Debug sessions are independent of releases and features. A session enforces: reproducer → root cause → failing test → fix → verification. Sessions persist at `.planning/debug-sessions/{id}/` and survive `/clear`.
+
+```
+reproduce → investigate → hypothesize → fix → verify → (resolved | abandoned)
+    ↑             ↓                      ↓         ↑
+    │             └── (low confidence) ──┘         │
+    │                                              │
+    └── (test still fails — re-investigate) ───────┘
+```
+
+### Session Status vs Phase
+
+Debug uses two orthogonal state dimensions in `session.yaml`:
+
+- **`status`**: coarse-grained lifecycle (`investigating | hypothesizing | fixing | verifying | resolved | abandoned`). `resolved` and `abandoned` are terminal — sessions cannot be reopened.
+- **`phase`**: fine-grained workflow step (`reproduce | investigate | hypothesize | fix | verify`). The resume dispatch reads `phase` to re-enter the workflow at the right step.
+
+| Status | Meaning | Trigger |
+|--------|---------|---------|
+| `investigating` | Reproducer captured, debug agent tracing root cause | `/yolo:debug new` after reproducer confirmed |
+| `hypothesizing` | Root cause identified, failing test being written | Phase 2 completes with high/medium confidence |
+| `fixing` | Failing test in place, implementing minimal fix | Phase 3 failing test is in place |
+| `verifying` | Fix applied, re-running reproducer + suite | Phase 4 green |
+| `resolved` | Reproducer no longer reproduces, full suite green | Phase 5 gate passed |
+| `abandoned` | Closed without a fix (with documented reason) | `/yolo:debug end --status abandoned` |
+
+### Iron Laws
+
+1. **No fix without a reproducer.** If the reproducer cannot be confirmed, the session stays in `reproducer_status: unknown` and does not advance past Phase 1.
+2. **No fix without a failing test.** Phase 3 writes a test that MUST fail for the hypothesized reason before Phase 4 is allowed.
+3. **No resolution without fresh evidence.** Phase 5 requires running the reproducer and the full suite in the current response — "tests were green in Phase 4" does not count if Phase 4 was a prior session.
+4. **Debug agent is read-only.** It investigates and proposes; it never writes code. Fixes are applied by the orchestrator or a fresh execute agent in Phase 4.
+
+### session.yaml
+
+```yaml
+id: "2026-04-08-auth-redirect"     # {YYYY-MM-DD}-{slug}
+symptom: "Login redirects loop after OAuth callback"
+status: investigating              # investigating | hypothesizing | fixing | verifying | resolved | abandoned
+phase: reproduce                   # reproduce | investigate | hypothesize | fix | verify
+created_at: 2026-04-08T10:00:00Z
+updated_at: 2026-04-08T10:00:00Z
+reproducer_status: confirmed       # confirmed | unknown | flaky
+scope:
+  directories: []                  # populated by Phase 2 debug agent
+  related_files: []                # populated by Phase 2 debug agent
+current_hypothesis: null           # one-line hypothesis from Phase 2
+confidence: null                   # high | medium | low (from Phase 2 output)
+root_cause: null                   # one-line root cause from Phase 2
+fix_commit: null                   # SHA once fix is committed
+fix_branch: null                   # debug worktree branch if used ("debug/{id}")
+session:
+  last_action: "Debug session created"
+  resume: "Run /yolo:debug resume {id} to continue"
+```
+
+> **Note:** Debug sessions do not use `state.yaml` for status tracking, but workflows should update `state.yaml` `session.last_action`, `session.resume`, and `updated_at` at each phase transition so `/yolo:status` can surface active debug work for orientation. Debug sessions are otherwise independent — they can run concurrently with `/release run` or an active feature pipeline without touching release/feature state.
 
 ## Intake
 
@@ -367,6 +448,7 @@ releases:
       features_total: 4
       features_completed: 2
       percentage: 50                   # computed: features_total > 0 ? (features_completed / features_total) * 100 : 0 — recomputed by /feature complete, /feature add, /release start, and /release end
+    completed_at: null                 # cache — maps from release.yaml: completed_at. Set by /release end when release is completed. Null while active/pending.
 
 session:
   run_active: false                                       # true while /release run is executing; prevents concurrent runs
@@ -466,6 +548,7 @@ The plan agent also produces top-level output fields beyond per-task definitions
 | verify | haiku | Read, Glob, Grep, Bash (non-mutating commands only) | Verify work meets success criteria |
 | feature-breakdown | opus | Read, Glob, Grep (read-only) | Break release goal into ordered features |
 | decide | opus | Read, Glob, Grep (read-only) | Design decisions via multi-perspective debate |
+| debug | opus | Read, Glob, Grep, Bash (non-mutating only), WebSearch†, WebFetch† | Trace root cause via evidence chain; propose failing test + fix scope (read-only investigator — never writes code) |
 
 > † WebSearch and WebFetch are deferred tools — the orchestrator must use ToolSearch to load them before spawning the research agent.
 >
@@ -518,7 +601,7 @@ The `/yolo:release run` workflow uses the `Skill` tool to invoke `/yolo:feature 
 
 | Command | Description |
 |---------|-------------|
-| `/yolo:feature start <id> [--force] [--prompt "<text>"]` | Full pipeline: research → plan → execute → hook gate → verify → complete (`--force` bypasses missing dependency checks) |
+| `/yolo:feature start <id> [--force] [--prompt "<text>"]` | Full pipeline: research → plan → execute → review → hook gate → verify → complete (`--force` bypasses missing dependency checks) |
 | `/yolo:feature add <name> [--prompt "<goal>"]` | Add new feature to active release |
 | `/yolo:feature plan [--amend] [--force] [--prompt "<text>"]` | Create or amend plan.md with tasks (`--force` overrides researching recency check) |
 | `/yolo:feature verify [--force]` | Check success criteria (auto-completes on pass; `--force` bypasses `hook_gate_failed` status guard; calling on `in_progress` features skips Phase 4 hook gate; also accepts `verify_failed` status for re-verification) |
@@ -533,6 +616,17 @@ The `/yolo:release run` workflow uses the `Skill` tool to invoke `/yolo:feature 
 | `/yolo:intake add <path> [--as <name>] [--release <id>] [--prompt "<text>"]` | Add local files as .md digests |
 | `/yolo:intake list` | List intake versions |
 | `/yolo:intake status` | Show current version and stats |
+
+### Debug Commands
+
+Debug sessions are standalone — they do not belong to a release and do not block the feature pipeline. Sessions survive `/clear` via `.planning/debug-sessions/{id}/`. Iron law: no fix without a reproducer and a failing test.
+
+| Command | Description |
+|---------|-------------|
+| `/yolo:debug new <symptom> [--prompt "<context>"]` | Start a new debug session (enforces reproducer → root cause → failing test → fix → verification) |
+| `/yolo:debug resume [id]` | Resume an existing session (auto-picks if only one active) |
+| `/yolo:debug list` | List all debug sessions (active + closed) |
+| `/yolo:debug end <id> [--status resolved\|abandoned]` | Close a session |
 
 ### General Commands
 
@@ -559,6 +653,7 @@ agents:
   verify: haiku
   feature-breakdown: opus
   decide: opus
+  debug: opus
 
 limits:
   max_tasks_per_feature: 5

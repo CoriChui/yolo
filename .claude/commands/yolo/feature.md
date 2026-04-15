@@ -1,6 +1,6 @@
 ---
 name: yolo:feature
-description: Manage features within releases
+description: Use when starting, resuming, or managing a feature inside the active release — runs the full pipeline (research → plan → execute → review → hook gate → verify → complete), amends plans, adds features, or reports feature status. Requires an active release.
 argument-hint: "[start|plan|verify|complete|status|add] [args] [--prompt] [--amend] [--force]"
 allowed-tools:
   - Read
@@ -27,7 +27,7 @@ allowed-tools:
 Manage features — release-scoped work units.
 
 **Subcommands:**
-- `/yolo:feature start <id> [--force]` — Full pipeline: research → plan → execute → hook gate → verify → complete (`--force` bypasses missing dependency checks)
+- `/yolo:feature start <id> [--force]` — Full pipeline: research → plan → execute → review → hook gate → verify → complete (`--force` bypasses missing dependency checks)
 - `/yolo:feature start <id> --prompt "<text>"` — Start with custom instructions
 - `/yolo:feature plan [--amend] [--force] [--prompt "<text>"]` — Create or amend execution plan (`--force` overrides researching recency check)
 - `/yolo:feature verify [--force]` — Check success criteria (auto-completes on pass; `--force` bypasses hook_gate_failed guard). Calling on in_progress skips hook gate

@@ -1,6 +1,6 @@
 ---
 name: yolo:decide
-description: Make a design decision with multi-perspective analysis
+description: Use when facing a non-trivial design tradeoff that needs structured analysis — architecture choices, tech selection, pattern decisions, or resolving disagreements. Runs Architect/Pragmatist/Critic debate and saves the decision to .planning/decisions/.
 argument-hint: "[question]"
 allowed-tools:
   - Read
@@ -20,9 +20,9 @@ Takes a question, spawns a decide agent, and produces a structured recommendatio
 </objective>
 
 <execution_context>
-Read `.planning/state.yaml` and `.planning/config.yaml` first. Validate `.planning/` exists — if missing, error: "Run `/yolo:init` first."
+Ensure `.planning/decisions/` exists — create with `mkdir -p .planning/decisions` if missing.
 Read `.claude/yolo/agents/decide.md` for the agent prompt.
-Note: This is a single-shot command that skips the workflow layer by design.
+Note: This is a single-shot command that does not require /yolo:init or any state files.
 Note: The allowed-tools above apply to the orchestrator (this command). The spawned decide agent is restricted to Read, Glob, Grep (read-only) as declared in the agent file.
 </execution_context>
 
@@ -32,16 +32,14 @@ Arguments: $ARGUMENTS
 
 <process>
 
-1. **Validate:** Read `.planning/config.yaml` — verify it exists and contains `agents.decide`. If missing, error: "Run `/yolo:init` first."
+1. **Validate:** Ensure `.planning/decisions/` exists (create with `mkdir -p` if missing)
 2. Get question from $ARGUMENTS or ask user
 3. Gather codebase context: use Glob and Grep to find files relevant to the question, then Read key files to build a markdown context summary
-4. Ensure `.planning/decisions/` directory exists (create with `mkdir -p` if missing)
-5. Spawn decide agent via Task tool (model from `.planning/config.yaml` `agents.decide`) with the question and the gathered codebase context
+4. Spawn decide agent via Task tool with the question and the gathered codebase context
 
 ## Post-Agent Orchestrator Steps
 
-6. Save decision to `.planning/decisions/{slug}.md`
-7. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `session.last_action` to decision summary, update `session.resume` and `updated_at`.
-8. Report recommendation
+5. Save decision to `.planning/decisions/{slug}.md`
+6. Report recommendation
 
 </process>

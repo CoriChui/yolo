@@ -4,9 +4,10 @@
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECONCILE="$SCRIPT_DIR/reconcile.sh"
-TEST_DIR="/tmp/yolo-spike-edge"
+TEST_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEST_DIR"' EXIT
 PASS=0
 FAIL=0
 
@@ -40,7 +41,6 @@ assert_exit_code() {
 # Setup
 # ============================================================
 echo -e "${YELLOW}=== Setting up edge case test repo ===${NC}"
-rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 git init -b main
@@ -79,7 +79,7 @@ branch: feature/multi-commit
 2. [ ] Do task 2
 EOF
 
-OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/multi-commit.md" "feature/multi-commit" --repo "$TEST_DIR" 2>&1)
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/multi-commit.md" "feature/multi-commit" --repo "$TEST_DIR" 2>&1) || true
 echo "$OUTPUT"
 echo ""
 
@@ -110,7 +110,7 @@ branch: feature/complex-labels
 2. [ ] Replace $variables and special chars: [brackets], (parens)
 EOF
 
-OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/complex-labels.md" "feature/complex-labels" --repo "$TEST_DIR" 2>&1)
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/complex-labels.md" "feature/complex-labels" --repo "$TEST_DIR" 2>&1) || true
 echo "$OUTPUT"
 echo ""
 
@@ -139,8 +139,8 @@ EOF
 EXIT_CODE=0
 OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/no-plan.md" "feature/complex-labels" --repo "$TEST_DIR" 2>&1) || EXIT_CODE=$?
 echo "$OUTPUT"
-assert_exit_code "Exits with error for missing plan" "1" "$EXIT_CODE"
-assert_contains "Reports no tasks found" "$OUTPUT" "No tasks found"
+assert_exit_code "Exits 2 for missing plan with orphan commit (drift detected)" "2" "$EXIT_CODE"
+assert_contains "Derives think step for missing plan" "$OUTPUT" "think (no plan tasks yet)"
 
 # ============================================================
 # Edge 4: Feature file with empty verification section
@@ -185,6 +185,7 @@ branch: feature/verify-test
 1. [x] Only task
 
 ## Verification
+passed: true
 Tests passed: all 5 assertions green.
 Linter: 0 errors, 0 warnings.
 EOF
@@ -219,7 +220,7 @@ branch: feature/gaps
 5. [ ] Fifth
 EOF
 
-OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/gaps.md" "feature/gaps" --repo "$TEST_DIR" 2>&1)
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/gaps.md" "feature/gaps" --repo "$TEST_DIR" 2>&1) || true
 echo "$OUTPUT"
 echo ""
 
@@ -255,11 +256,143 @@ branch: feature/stress
 $(echo -e "$PLAN_LINES")
 EOF
 
-OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/stress.md" "feature/stress" --repo "$TEST_DIR" 2>&1)
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/stress.md" "feature/stress" --repo "$TEST_DIR" 2>&1) || true
 ELAPSED=$(echo "$OUTPUT" | grep "Elapsed:" | awk '{print $2}')
 echo "  50 tasks reconciled in: $ELAPSED"
 
 assert_contains "All 50 tasks found" "$OUTPUT" "check (all 50 tasks done, needs verification)"
+
+# ============================================================
+# Edge 7: [fix-N] commits are recognized
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Edge 7: [fix-N] commits recognized ===${NC}"
+
+git checkout main
+git checkout -b feature/fix-commit
+
+echo "x" > x.txt && git add x.txt && git commit -m "[task-1] Implement feature"
+echo "y" > y.txt && git add y.txt && git commit -m "[fix-1] Fix issue found during check"
+
+cat > "$TEST_DIR/.planning/features/fix-commit.md" << 'EOF'
+---
+goal: Fix commit test
+branch: feature/fix-commit
+---
+
+## Plan
+1. [ ] Implement feature
+EOF
+
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/fix-commit.md" "feature/fix-commit" --repo "$TEST_DIR" 2>&1) || true
+echo "$OUTPUT"
+echo ""
+
+assert_contains "[fix-N] commit recognized for task-1" "$OUTPUT" "DRIFT: task-1 is UNCHECKED"
+assert_contains "Step is check with fix commit" "$OUTPUT" "check (all 1 tasks done"
+
+# ============================================================
+# Edge 8: Verification with passed: false -> do step
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Edge 8: Verification passed: false -> do step ===${NC}"
+
+cat > "$TEST_DIR/.planning/features/verify-failed.md" << 'EOF'
+---
+goal: Verify failed test
+branch: feature/fix-commit
+---
+
+## Plan
+1. [x] Implement feature
+
+## Verification
+passed: false
+issues:
+  - Test coverage below threshold
+  - Lint errors in auth.ts
+EOF
+
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/verify-failed.md" "feature/fix-commit" --repo "$TEST_DIR" 2>&1)
+echo "$OUTPUT"
+echo ""
+
+assert_contains "Failed verification -> do-fix step" "$OUTPUT" "do-fix (verification failed, needs fix and re-check)"
+
+# ============================================================
+# Edge 9: Verification with passed: true -> ship step
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Edge 9: Verification passed: true -> ship step ===${NC}"
+
+cat > "$TEST_DIR/.planning/features/verify-passed.md" << 'EOF'
+---
+goal: Verify passed test
+branch: feature/fix-commit
+---
+
+## Plan
+1. [x] Implement feature
+
+## Verification
+passed: true
+All tests green, linter clean.
+EOF
+
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/verify-passed.md" "feature/fix-commit" --repo "$TEST_DIR" 2>&1)
+echo "$OUTPUT"
+echo ""
+
+assert_contains "Passed verification -> ship step" "$OUTPUT" "ship (all tasks done, verified)"
+
+# ============================================================
+# Edge 10: Merged branch detection
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Edge 10: Merged branch detection ===${NC}"
+
+# After a branch is merged into main, its commits are reachable from main,
+# so merge-base(main, branch) equals the branch tip and the git log range
+# is empty. Reconcile detects drift (checked in file, no commit visible).
+git checkout main
+git checkout -b feature/merged-test
+
+echo "m" > m.txt && git add m.txt && git commit -m "[task-1] Only task"
+
+cat > "$TEST_DIR/.planning/features/merged-test.md" << 'EOF'
+---
+goal: Merged state test
+branch: feature/merged-test
+---
+
+## Plan
+1. [x] Only task
+
+## Verification
+passed: true
+All tests green.
+EOF
+
+# Create a divergent commit on main AFTER the branch point so the merge
+# is not a fast-forward.
+git checkout main
+echo "main-diverge" > main-diverge.txt && git add main-diverge.txt && git commit -m "diverge main"
+
+# Merge the feature branch into main
+git merge feature/merged-test --no-edit
+
+# Check out a different branch
+git checkout -b feature/other-branch
+
+OUTPUT=$("$RECONCILE" "$TEST_DIR/.planning/features/merged-test.md" "feature/merged-test" --repo "$TEST_DIR" 2>&1) || true
+echo "$OUTPUT"
+echo ""
+
+# After merge, reconcile detects the branch is an ancestor of main and
+# derives "done (merged)" as the step. It still reports drift for tasks
+# whose commits are invisible in the merge-base..branch range.
+assert_contains "Merged branch derives done step" "$OUTPUT" "done (merged)"
+assert_contains "Merged branch detects drift" "$OUTPUT" "DRIFT: task-1 is CHECKED in file but has NO matching commit"
 
 # ============================================================
 # Summary

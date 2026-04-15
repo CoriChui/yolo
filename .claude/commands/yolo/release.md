@@ -1,6 +1,6 @@
 ---
 name: yolo:release
-description: Create and manage releases (major feature sets)
+description: Use when starting a new delivery cycle, kicking off a pending release (research + automatic feature breakdown), running all features sequentially through the pipeline, or closing out a release. Releases are the top-level work containers.
 argument-hint: "[new|start|run|status|end] [args] [--from] [--prompt]"
 allowed-tools:
   - Read

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # run-tests.sh — execute test and lint commands from a feature file's YAML frontmatter.
 #
-# Usage: run-tests.sh <feature-file> [--workdir <path>] [--tail <N>]
+# Usage: run-tests.sh <feature-file> [--repo <path>] [--tail <N>]
 # Exit 0 = all pass, Exit 1 = any failure
 set -euo pipefail
 
-source "$(dirname "$0")/lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 # ── Argument parsing ───────────────────────────────────────────────────
 FEATURE_FILE="${1:-}"
@@ -16,7 +17,13 @@ TAIL_LINES=200
 
 if [[ -z "$FEATURE_FILE" ]]; then
   echo "Error: No feature file specified." >&2
-  echo "Usage: run-tests.sh <feature-file> [--workdir <path>] [--tail <N>]" >&2
+  echo "Usage: run-tests.sh <feature-file> [--repo <path>] [--tail <N>]" >&2
+  exit 1
+fi
+
+if [[ "$FEATURE_FILE" == --* ]]; then
+  echo "Error: first argument must be a feature file path, not a flag ('$FEATURE_FILE')" >&2
+  echo "Usage: run-tests.sh <feature-file> [--repo <path>] [--tail <N>]" >&2
   exit 1
 fi
 
@@ -27,10 +34,10 @@ fi
 
 while (( $# > 0 )); do
   case "$1" in
-    --workdir)
+    --repo)
       WORKDIR="${2:-}"
       if [[ -z "$WORKDIR" ]]; then
-        echo "Error: --workdir requires a path argument" >&2
+        echo "Error: $1 requires a path argument" >&2
         exit 1
       fi
       shift 2
@@ -39,6 +46,10 @@ while (( $# > 0 )); do
       TAIL_LINES="${2:-}"
       if [[ -z "$TAIL_LINES" ]]; then
         echo "Error: --tail requires a number argument" >&2
+        exit 1
+      fi
+      if ! [[ "$TAIL_LINES" =~ ^[0-9]+$ ]]; then
+        echo "Error: --tail must be a positive integer, got '$TAIL_LINES'" >&2
         exit 1
       fi
       shift 2
@@ -69,14 +80,24 @@ parse_json_array() {
     return 0
   fi
 
-  # Split on comma, strip quotes and whitespace
-  local IFS=','
+  # Try jq first (handles commas in quoted strings correctly)
+  if command -v jq &>/dev/null; then
+    printf '[%s]' "$raw" | jq -r '.[]' 2>/dev/null && return 0
+  fi
+
+  # Fallback: split on comma (does not handle commas inside quoted strings)
+  local IFS=',' fragment_warnings=0
   for item in $raw; do
     # Trim whitespace
     item="$(printf '%s' "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     # Strip surrounding quotes
     item="${item#\"}"
     item="${item%\"}"
+    # Warn on likely malformed fragments from comma splitting
+    if [[ "$item" =~ ^[[:space:]]*\" && ! "$item" =~ \"[[:space:]]*$ ]] || [[ "$item" =~ ^[[:space:]]*\' && ! "$item" =~ \'[[:space:]]*$ ]]; then
+      echo "Warning: possible malformed command fragment after comma split: '$item'" >&2
+      fragment_warnings=$(( fragment_warnings + 1 ))
+    fi
     # Skip empty items
     if [[ -n "$item" ]]; then
       printf '%s\n' "$item"
@@ -98,6 +119,9 @@ run_command() {
   local cmd_output=""
   local cmd_exit=0
 
+  # Commands come from feature file frontmatter (developer-authored, trusted input).
+  # SECURITY NOTE: eval is used because commands may include shell features (pipes, redirects).
+  # Feature file frontmatter is written by the orchestrator, not by agents directly.
   set +e
   cmd_output=$(cd "$WORKDIR" && eval "$cmd" 2>&1)
   cmd_exit=$?
