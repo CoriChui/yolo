@@ -243,7 +243,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|mcp__.*",
         "hooks": [
           {
             "type": "command",
@@ -261,6 +261,16 @@
             "type": "command",
             "command": "bash scripts/yolo-cli/hook-post-write.sh",
             "statusMessage": "Checking test file modifications..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/yolo-cli/hook-post-bash.sh",
+            "statusMessage": "Verifying bash writes against plan scope..."
           }
         ]
       }
