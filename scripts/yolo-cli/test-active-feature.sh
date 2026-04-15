@@ -81,6 +81,56 @@ rc=$?
 set -e
 assert_eq "main branch again exits 1" "1" "$rc"
 
+# ── Phase cache: second call uses cached value ───────────────────
+echo "=== get_current_phase cache ==="
+# Source lib.sh in a controlled subshell to exercise the cache
+source "$SCRIPT_DIR/lib.sh"
+git -C "$REPO" checkout -q feature/dark-mode
+# Clean any stale cache from previous runs
+rm -f /tmp/yolo-phase-${USER:-anon}-*
+
+# First call computes and writes cache
+phase1="$(get_current_phase "$REPO")"
+head_sha="$(git -C "$REPO" rev-parse --short=12 HEAD)"
+# Cache key format: /tmp/yolo-phase-<user>-<sha>-<slug>-<branch>
+cache_file="/tmp/yolo-phase-${USER:-anon}-${head_sha}-dark-mode-HEAD"
+if [[ -f "$cache_file" ]]; then
+  echo "  PASS: cache file created after first call"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: cache file not created"
+  FAIL=$(( FAIL + 1 ))
+fi
+
+# Tamper with cache to prove second call uses it (not recomputation)
+echo "sentinel-cached-value" > "$cache_file"
+phase2="$(get_current_phase "$REPO")"
+assert_eq "second call returns cached value (not recomputed)" "sentinel-cached-value" "$phase2"
+
+# YOLO_NO_PHASE_CACHE=1 bypasses cache
+phase3="$(YOLO_NO_PHASE_CACHE=1 get_current_phase "$REPO")"
+if [[ "$phase3" != "sentinel-cached-value" ]]; then
+  echo "  PASS: YOLO_NO_PHASE_CACHE=1 bypasses cache"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: cache not bypassed"
+  FAIL=$(( FAIL + 1 ))
+fi
+
+# New commit → new SHA → cache miss → fresh compute
+echo "more" > "$REPO/a.js"
+git -C "$REPO" add a.js
+git -C "$REPO" commit -q -m "[task-2] something
+
+YOLO-Feature: dark-mode
+YOLO-Phase: check"
+
+phase4="$(get_current_phase "$REPO")"
+assert_eq "new commit invalidates cache (fresh value)" "check" "$phase4"
+
+# Cleanup
+rm -f /tmp/yolo-phase-${USER:-anon}-*
+
 # ── Invalid --format errors ───────────────────────────────────────
 echo "=== invalid --format rejected ==="
 set +e

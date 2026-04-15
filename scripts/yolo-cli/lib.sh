@@ -205,13 +205,29 @@ parse_trailer() {
 # to 'plan' for feature branches without task commits yet).
 get_current_phase() {
   local repo="${1:-.}" branch="${2:-HEAD}"
+
   local slug
   slug="$(get_active_feature "$repo" 2>/dev/null || true)"
 
-  # Scan recent commits for a YOLO-Phase trailer. If a feature is active,
-  # only accept trailers whose YOLO-Feature matches — avoids inheriting
-  # phase state from a parent branch's history.
-  local commit commit_slug commit_phase
+  # Cache: keyed by HEAD SHA + active slug + branch. Two feature branches
+  # that share a HEAD must resolve to different phases because their
+  # YOLO-Feature trailer filter differs — include slug in the key.
+  local head_sha cache_file=""
+  head_sha="$(git -C "$repo" rev-parse --short=12 HEAD 2>/dev/null || true)"
+  if [[ -n "$head_sha" ]]; then
+    local user="${USER:-anon}"
+    local branch_slug="${branch//\//_}"
+    local slug_key="${slug:-nofeat}"
+    slug_key="${slug_key//\//_}"
+    cache_file="/tmp/yolo-phase-${user}-${head_sha}-${slug_key}-${branch_slug}"
+    if [[ -f "$cache_file" && "${YOLO_NO_PHASE_CACHE:-0}" != "1" ]]; then
+      cat "$cache_file" 2>/dev/null
+      return 0
+    fi
+  fi
+
+  # Scan recent commits for a YOLO-Phase trailer matching the active slug.
+  local commit commit_slug commit_phase result=""
   while IFS= read -r commit; do
     [[ -z "$commit" ]] && continue
     commit_phase="$(parse_trailer "$repo" "$commit" "YOLO-Phase")"
@@ -222,10 +238,16 @@ get_current_phase() {
         continue
       fi
     fi
-    printf '%s' "$commit_phase"
-    return 0
+    result="$commit_phase"
+    break
   done < <(git -C "$repo" log -n 50 --format='%H' --grep='^YOLO-Phase:' "$branch" 2>/dev/null || true)
-  printf ''
+
+  # Best-effort cache write.
+  if [[ -n "$cache_file" ]]; then
+    printf '%s' "$result" > "$cache_file" 2>/dev/null || true
+  fi
+
+  printf '%s' "$result"
 }
 
 # ── _normalize_path ───────────────────────────────────────────────
