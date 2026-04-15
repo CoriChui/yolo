@@ -12,7 +12,8 @@
 set -euo pipefail
 
 # shellcheck source=lib.sh
-source "$(dirname "$0")/lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
 
 # ---------- argument parsing ----------
 
@@ -23,8 +24,10 @@ BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --fix)    FIX=true; shift ;;
-    --repo)   REPO_PATH="$2"; shift 2 ;;
+    # --apply and --fix both enable mutations; --fix is kept as a compatibility
+    # alias for prior callers and tests. Read-only mode is the default.
+    --apply|--fix) FIX=true; shift ;;
+    --repo)   REPO_PATH="${2:-}"; if [[ -z "$REPO_PATH" ]]; then echo "Error: --repo requires a path" >&2; exit 1; fi; shift 2 ;;
     -*)       echo "Unknown option: $1" >&2; exit 1 ;;
     *)
       if [[ -z "$FEATURE_FILE" ]]; then
@@ -39,9 +42,44 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$FEATURE_FILE" || -z "$BRANCH" ]]; then
-  echo "Usage: reconcile.sh <feature-file> <branch-name> [--fix] [--repo <path>]" >&2
+# ── Refuse to run during unsafe git states ──────────────────────────
+# Rebase, bisect, merge, cherry-pick all have intermediate SHAs that would
+# poison the phase derivation. Refuse until the operation finishes.
+check_unsafe_state() {
+  local repo="$1" gitdir
+  gitdir="$(git -C "$repo" rev-parse --git-dir 2>/dev/null || true)"
+  [[ -z "$gitdir" ]] && return 0
+  # git-dir is relative to repo; normalize
+  case "$gitdir" in
+    /*) ;;
+    *) gitdir="$repo/$gitdir" ;;
+  esac
+  local unsafe=""
+  [[ -d "$gitdir/rebase-merge" ]] && unsafe="rebase (merge-mode)"
+  [[ -d "$gitdir/rebase-apply" ]] && unsafe="rebase (apply-mode)"
+  [[ -f "$gitdir/MERGE_HEAD" ]]     && unsafe="pending merge"
+  [[ -f "$gitdir/CHERRY_PICK_HEAD" ]] && unsafe="cherry-pick in progress"
+  [[ -f "$gitdir/REVERT_HEAD" ]]    && unsafe="revert in progress"
+  [[ -f "$gitdir/BISECT_LOG" ]]     && unsafe="bisect in progress"
+  if [[ -n "$unsafe" ]]; then
+    echo "Error: refusing to reconcile during $unsafe — finish or abort the operation first" >&2
+    exit 1
+  fi
+}
+check_unsafe_state "$REPO_PATH"
+
+if [[ -z "$FEATURE_FILE" ]]; then
+  echo "Usage: reconcile.sh <feature-file> [<branch-name>] [--fix] [--repo <path>]" >&2
   exit 1
+fi
+
+# Auto-detect branch from feature file frontmatter if not provided
+if [[ -z "$BRANCH" ]]; then
+  BRANCH="$(parse_frontmatter "$FEATURE_FILE" "branch")"
+  if [[ -z "$BRANCH" ]]; then
+    echo "Error: No branch specified and no 'branch:' field in feature file frontmatter" >&2
+    exit 1
+  fi
 fi
 
 if [[ ! -f "$FEATURE_FILE" ]]; then
@@ -49,8 +87,11 @@ if [[ ! -f "$FEATURE_FILE" ]]; then
   exit 1
 fi
 
+# Resolve to absolute path before any cd operations
+FEATURE_FILE="$(cd "$(dirname "$FEATURE_FILE")" && pwd)/$(basename "$FEATURE_FILE")"
+
 # ---------- timing ----------
-START_TIME=$(python3 -c 'import time; print(time.time())')
+START_TIME=$SECONDS
 
 # ---------- 1. Parse the ## Plan section ----------
 # Extract lines between "## Plan" and the next "##" heading (or EOF).
@@ -77,7 +118,7 @@ while IFS= read -r line; do
   if $IN_PLAN; then
     # Match: "N. [x] description" or "N. [ ] description"
     # The task number N becomes task-N.
-    if [[ "$line" =~ ^([0-9]+)\.[[:space:]]\[([xX[:space:]])\][[:space:]]+(.*) ]]; then
+    if [[ "$line" =~ ^([0-9]+)\.[[:space:]]\[([xX[:space:]])\][[:space:]]*(.*) ]]; then
       TASK_NUM="${BASH_REMATCH[1]}"
       CHECK_CHAR="${BASH_REMATCH[2]}"
       LABEL="${BASH_REMATCH[3]}"
@@ -102,10 +143,7 @@ while IFS= read -r line; do
   fi
 done < "$FEATURE_FILE"
 
-if [[ ${#PLAN_TASK_IDS[@]} -eq 0 ]]; then
-  echo "Error: No tasks found in ## Plan section of $FEATURE_FILE" >&2
-  exit 1
-fi
+# Empty plan is valid — means we're in think/plan state (handled in step derivation)
 
 # ---------- 2. Find [task-N] commits on the feature branch ----------
 # Use merge-base to only look at commits on the feature branch (not inherited from main).
@@ -128,7 +166,7 @@ else
   MERGE_BASE=$(git merge-base "$MAIN_BRANCH" "$BRANCH" 2>/dev/null || git rev-list --max-parents=0 HEAD 2>/dev/null | head -1)
 fi
 
-# Get commits on the feature branch with [task-N] markers
+# Get commits on the feature branch with [task-N] or [fix-N] markers
 declare -A GIT_TASK_COMMITS=()   # task-id -> commit hash (short)
 declare -A GIT_TASK_MSGS=()      # task-id -> commit message
 
@@ -137,16 +175,17 @@ while IFS= read -r logline; do
   COMMIT_HASH="${logline%% *}"
   COMMIT_MSG="${logline#* }"
 
-  # Extract [task-N] from the commit message
-  if [[ "$COMMIT_MSG" =~ \[task-([0-9]+)\] ]]; then
-    TID="task-${BASH_REMATCH[1]}"
+  # Extract [task-N] or [fix-N] from the commit message
+  if [[ "$COMMIT_MSG" =~ \[(task|fix)-([0-9]+)\] ]]; then
+    TID="task-${BASH_REMATCH[2]}"
     # If multiple commits for same task, keep the latest (first in log = most recent)
     if [[ -z "${GIT_TASK_COMMITS[$TID]+x}" ]]; then
       GIT_TASK_COMMITS["$TID"]="$COMMIT_HASH"
       GIT_TASK_MSGS["$TID"]="$COMMIT_MSG"
     fi
   fi
-done < <(git log "${MERGE_BASE}..${BRANCH}" --oneline --grep='\[task-' 2>/dev/null || true)
+# BRE: match commits containing [task- or [fix-
+done < <(git log "${MERGE_BASE}..${BRANCH}" --oneline --grep='\[task-\|\[fix-' 2>/dev/null || true)
 
 # ---------- 3. Compare and detect drift ----------
 
@@ -211,49 +250,67 @@ done
 #   - Has verification -> ship (or done if merged)
 
 HAS_VERIFICATION=false
+VERIFICATION_PASSED=""
+READING_VERIFICATION=false
 while IFS= read -r line; do
   if [[ "$line" =~ ^##[[:space:]]Verification ]]; then
-    # Check if there's actual content after the heading
-    HAS_CONTENT=false
     READING_VERIFICATION=true
     continue
   fi
-  if [[ "${READING_VERIFICATION:-false}" == "true" ]]; then
+  if [[ "$READING_VERIFICATION" == "true" ]]; then
     if [[ "$line" =~ ^##[[:space:]] ]]; then
       break
     fi
-    # Non-empty, non-comment line
+    # Non-empty, non-placeholder line
     STRIPPED=$(echo "$line" | tr -d '[:space:]')
-    if [[ -n "$STRIPPED" && "$STRIPPED" != "(Writtenbycheckstep"* ]]; then
+    if [[ -n "$STRIPPED" ]] && ! echo "$line" | grep -qi '(Written by'; then
       HAS_VERIFICATION=true
-      break
+    fi
+    # Check for passed: true/false
+    if [[ "$line" =~ passed:[[:space:]]*(true|false) ]]; then
+      VERIFICATION_PASSED="${BASH_REMATCH[1]}"
     fi
   fi
 done < "$FEATURE_FILE"
 
-CURRENT_STEP=""
-if [[ $COMPLETED_TASKS -eq 0 ]]; then
-  # Check if there is a plan at all
-  if [[ $TOTAL_TASKS -gt 0 ]]; then
-    CURRENT_STEP="plan (plan exists, no tasks started)"
-  else
-    CURRENT_STEP="think"
+# Check if branch is already merged into main (top-level, before task completion logic).
+# Must be checked first: after merge, git log merge-base..branch returns empty,
+# making COMPLETED_TASKS=0 even if all tasks were done.
+# Only consider "merged" if the plan has checked tasks — otherwise the branch
+# just hasn't been started yet (created from main with no commits).
+IS_MERGED=false
+if [[ -n "$MAIN_BRANCH" ]] && [[ $TOTAL_TASKS -gt 0 ]]; then
+  HAS_CHECKED_TASKS=false
+  for TID in "${PLAN_TASK_IDS[@]}"; do
+    if [[ "${PLAN_CHECKED[$TID]}" == "true" ]]; then
+      HAS_CHECKED_TASKS=true
+      break
+    fi
+  done
+  if $HAS_CHECKED_TASKS; then
+    if git merge-base --is-ancestor "$BRANCH" "$MAIN_BRANCH" 2>/dev/null; then
+      IS_MERGED=true
+    fi
   fi
+fi
+
+CURRENT_STEP=""
+if $IS_MERGED; then
+  CURRENT_STEP="done (merged)"
+elif [[ $TOTAL_TASKS -eq 0 ]]; then
+  CURRENT_STEP="think (no plan tasks yet)"
+elif [[ $COMPLETED_TASKS -eq 0 ]]; then
+  CURRENT_STEP="plan (plan exists, no tasks started)"
 elif [[ $COMPLETED_TASKS -lt $TOTAL_TASKS ]]; then
   CURRENT_STEP="do ($COMPLETED_TASKS/$TOTAL_TASKS tasks completed)"
 elif [[ $COMPLETED_TASKS -eq $TOTAL_TASKS ]]; then
   if $HAS_VERIFICATION; then
-    # Check if branch is merged into main
-    IS_MERGED=false
-    if [[ -n "$MAIN_BRANCH" ]]; then
-      if git merge-base --is-ancestor "$BRANCH" "$MAIN_BRANCH" 2>/dev/null; then
-        IS_MERGED=true
-      fi
-    fi
-    if $IS_MERGED; then
-      CURRENT_STEP="done (merged)"
-    else
+    if [[ "$VERIFICATION_PASSED" == "false" ]]; then
+      CURRENT_STEP="do-fix (verification failed, needs fix and re-check)"
+    elif [[ "$VERIFICATION_PASSED" == "true" ]]; then
       CURRENT_STEP="ship (all tasks done, verified)"
+    else
+      CURRENT_STEP="check (verification incomplete — no explicit passed: field)"
     fi
   else
     CURRENT_STEP="check (all $TOTAL_TASKS tasks done, needs verification)"
@@ -262,8 +319,7 @@ fi
 
 # ---------- 5. Output report ----------
 
-END_TIME=$(python3 -c 'import time; print(time.time())')
-ELAPSED=$(python3 -c "print(f'{${END_TIME} - ${START_TIME}:.3f}')")
+ELAPSED=$(( SECONDS - START_TIME ))
 
 echo "========================================"
 echo "  YOLO v2 Reconciliation Report"
@@ -323,7 +379,8 @@ if $FIX; then
     echo "--- Fix Mode: Updating feature file ---"
 
     # Build the updated file content
-    TMPFILE=$(mktemp)
+    TMPFILE=$(mktemp "${FEATURE_FILE}.tmp.XXXXXX")
+    trap 'rm -f "$TMPFILE"' EXIT INT TERM
     IN_PLAN=false
 
     while IFS= read -r line; do
@@ -347,9 +404,9 @@ if $FIX; then
           LABEL="${BASH_REMATCH[3]}"
           TASK_ID="task-${TASK_NUM}"
 
-          # Strip existing trailing hash from label
+          # Strip existing trailing hash from label (pattern matches extraction regex on line 100)
           CLEAN_LABEL="$LABEL"
-          if [[ "$CLEAN_LABEL" =~ ^(.*)[[:space:]][—–-]+[[:space:]]*[0-9a-f]{7,40}$ ]]; then
+          if [[ "$CLEAN_LABEL" =~ ^(.*[^[:space:]])?[[:space:]]*[—–-]+[[:space:]]*[0-9a-f]{7,40}$ ]]; then
             CLEAN_LABEL="${BASH_REMATCH[1]}"
           fi
 
@@ -366,8 +423,7 @@ if $FIX; then
       echo "$line" >> "$TMPFILE"
     done < "$FEATURE_FILE"
 
-    cp "$TMPFILE" "$FEATURE_FILE"
-    rm "$TMPFILE"
+    mv "$TMPFILE" "$FEATURE_FILE"
     echo "  Feature file updated: $FEATURE_FILE"
 
     # Show diff summary
@@ -388,3 +444,8 @@ fi
 
 echo ""
 echo "Done."
+
+# Exit 2 if drift was detected and --fix was not used (programmatic drift signal)
+if ! $FIX && [[ ${#DRIFT_MSGS[@]} -gt 0 || ${#ORPHAN_COMMITS[@]} -gt 0 ]]; then
+  exit 2
+fi

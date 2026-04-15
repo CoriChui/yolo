@@ -7,9 +7,10 @@
 #
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECONCILE="$SCRIPT_DIR/reconcile.sh"
-TEST_DIR="/tmp/yolo-spike-test"
+TEST_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEST_DIR"' EXIT
 PASS=0
 FAIL=0
 
@@ -81,7 +82,6 @@ assert_file_not_contains() {
 # Setup: create test git repo
 # ============================================================
 echo -e "${YELLOW}=== Setting up test repo at $TEST_DIR ===${NC}"
-rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 
@@ -160,7 +160,7 @@ Existing app uses hardcoded colors in Tailwind classes.
 ## Verification
 FEATURE
 
-OUTPUT1=$("$RECONCILE" "$TEST_DIR/.planning/features/dark-mode.md" "feature/dark-mode" --repo "$TEST_DIR" 2>&1)
+OUTPUT1=$("$RECONCILE" "$TEST_DIR/.planning/features/dark-mode.md" "feature/dark-mode" --repo "$TEST_DIR" 2>&1) || EXIT1=$?
 echo "$OUTPUT1"
 echo ""
 
@@ -265,7 +265,7 @@ Context.
 ## Verification
 FEATURE
 
-OUTPUT3=$("$RECONCILE" "$TEST_DIR/.planning/features/dark-mode.md" "feature/dark-mode" --repo "$TEST_DIR" 2>&1)
+OUTPUT3=$("$RECONCILE" "$TEST_DIR/.planning/features/dark-mode.md" "feature/dark-mode" --repo "$TEST_DIR" 2>&1) || true
 echo "$OUTPUT3"
 echo ""
 
@@ -297,6 +297,7 @@ Context.
 4. [x] Add localStorage persistence + SSR-safe init script
 
 ## Verification
+passed: true
 All criteria verified:
 - Theme toggle works: confirmed via manual test output
 - CSS variables: all color values use var() references
@@ -376,7 +377,7 @@ created: 2026-04-10
 2. [ ] Second task
 FEATURE
 
-OUTPUT6=$("$RECONCILE" "$TEST_DIR/.planning/features/orphan-test.md" "feature/orphan-test" --repo "$TEST_DIR" 2>&1)
+OUTPUT6=$("$RECONCILE" "$TEST_DIR/.planning/features/orphan-test.md" "feature/orphan-test" --repo "$TEST_DIR" 2>&1) || true
 echo "$OUTPUT6"
 echo ""
 
@@ -430,15 +431,222 @@ fi
 assert_contains "Second run shows no drift" "$OUTPUT7" "No drift detected"
 
 # ============================================================
-# Test 8: Performance — measure timing
+# Test 8: Branch auto-detection from frontmatter
 # ============================================================
 echo ""
-echo -e "${YELLOW}=== Test 8: Performance ===${NC}"
+echo -e "${YELLOW}=== Test 8: Branch auto-detection from frontmatter ===${NC}"
+
+cd "$TEST_DIR"
+git checkout feature/dark-mode
+
+# Run reconcile WITHOUT passing the branch name — should auto-detect from frontmatter
+OUTPUT8=$("$RECONCILE" "$TEST_DIR/.planning/features/dark-mode.md" --repo "$TEST_DIR" 2>&1)
+echo "$OUTPUT8"
+echo ""
+
+assert_contains "Auto-detect finds branch" "$OUTPUT8" "feature/dark-mode"
+assert_contains "Auto-detect derives correct step" "$OUTPUT8" "check (all 4 tasks done, needs verification)"
+
+# ============================================================
+# Test 9: Performance — measure timing
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Test 9: Performance ===${NC}"
 
 # Extract elapsed time from the report
 ELAPSED=$(echo "$OUTPUT1" | grep "Elapsed:" | awk '{print $2}')
 echo "  Reconciliation time: $ELAPSED"
 # Just report — no assertion on speed for now
+
+# ============================================================
+# Test 10: Error — no arguments
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Test 10: No arguments -> exit 1 with usage ===${NC}"
+
+OUTPUT10=$("$RECONCILE" 2>&1) || EXIT10=$?
+
+assert_contains "Shows usage message" "$OUTPUT10" "Usage: reconcile.sh"
+
+if [[ "${EXIT10:-0}" -eq 1 ]]; then
+  echo -e "  ${GREEN}PASS${NC}: Exits with code 1"
+  PASS=$((PASS + 1))
+else
+  echo -e "  ${RED}FAIL${NC}: Expected exit code 1, got ${EXIT10:-0}"
+  FAIL=$((FAIL + 1))
+fi
+
+# ============================================================
+# Test 11: Error — file not found
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Test 11: File not found -> exit 1 ===${NC}"
+
+OUTPUT11=$("$RECONCILE" "/tmp/nonexistent-yolo-feature-file-$$.md" "some-branch" 2>&1) || EXIT11=$?
+
+assert_contains "Shows file not found error" "$OUTPUT11" "Feature file not found"
+
+if [[ "${EXIT11:-0}" -eq 1 ]]; then
+  echo -e "  ${GREEN}PASS${NC}: Exits with code 1"
+  PASS=$((PASS + 1))
+else
+  echo -e "  ${RED}FAIL${NC}: Expected exit code 1, got ${EXIT11:-0}"
+  FAIL=$((FAIL + 1))
+fi
+
+# ============================================================
+# Test 12: Error — no branch specified
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Test 12: No branch in frontmatter and no branch arg -> exit 1 ===${NC}"
+
+# Create a feature file WITHOUT a branch: field in frontmatter
+NO_BRANCH_DIR="$(mktemp -d)"
+mkdir -p "$NO_BRANCH_DIR/.planning/features"
+cat > "$NO_BRANCH_DIR/.planning/features/no-branch.md" << 'FEATURE'
+---
+goal: A feature with no branch field
+created: 2026-04-10
+---
+
+## Criteria
+- [ ] Something
+
+## Plan
+1. [ ] Do something
+FEATURE
+
+OUTPUT12=$("$RECONCILE" "$NO_BRANCH_DIR/.planning/features/no-branch.md" 2>&1) || EXIT12=$?
+rm -rf "$NO_BRANCH_DIR"
+
+assert_contains "Shows no branch error" "$OUTPUT12" "No branch specified"
+
+if [[ "${EXIT12:-0}" -eq 1 ]]; then
+  echo -e "  ${GREEN}PASS${NC}: Exits with code 1"
+  PASS=$((PASS + 1))
+else
+  echo -e "  ${RED}FAIL${NC}: Expected exit code 1, got ${EXIT12:-0}"
+  FAIL=$((FAIL + 1))
+fi
+
+# ============================================================
+# Test 13: Verification without explicit passed field -> check step
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Test 13: Verification content but no passed: field -> check (incomplete) ===${NC}"
+
+cd "$TEST_DIR"
+git checkout feature/dark-mode
+
+cat > "$TEST_DIR/.planning/features/dark-mode.md" << 'FEATURE'
+---
+goal: Add dark mode support with CSS variables
+branch: feature/dark-mode
+created: 2026-04-10
+---
+
+## Criteria
+- [x] Theme toggle switches between light and dark
+
+## Context
+Context.
+
+## Plan
+1. [x] Create design tokens as CSS custom properties
+2. [x] Add ThemeContext + toggle component
+3. [x] Replace hardcoded Tailwind colors with var() references
+4. [x] Add localStorage persistence + SSR-safe init script
+
+## Verification
+All criteria reviewed:
+- Theme toggle works: confirmed via manual testing
+- CSS variables: all colors use var() references
+FEATURE
+
+OUTPUT13=$("$RECONCILE" "$TEST_DIR/.planning/features/dark-mode.md" "feature/dark-mode" --repo "$TEST_DIR" 2>&1) || true
+echo "$OUTPUT13"
+echo ""
+
+assert_contains "Step is check (verification incomplete)" "$OUTPUT13" "check (verification incomplete — no explicit passed: field)"
+
+# ============================================================
+# Unsafe-state refusal: rebase / merge / cherry-pick in progress
+# ============================================================
+echo ""
+echo -e "${YELLOW}=== Unsafe-state refusal ===${NC}"
+
+UNSAFE_REPO="$TEST_DIR/unsafe-repo"
+mkdir -p "$UNSAFE_REPO/.planning/features/probe"
+git -C "$UNSAFE_REPO" init -q -b main
+git -C "$UNSAFE_REPO" config user.email "t@t.t"
+git -C "$UNSAFE_REPO" config user.name "t"
+cat > "$UNSAFE_REPO/.planning/features/probe/feature.md" <<'FEATURE'
+---
+branch: feature/probe
+---
+
+## Plan
+1. [ ] something
+  - test: none
+  - files: a.txt
+
+2. [ ] another
+  - test: none
+  - files: b.txt
+FEATURE
+echo seed > "$UNSAFE_REPO/seed.txt"
+git -C "$UNSAFE_REPO" add .planning seed.txt
+git -C "$UNSAFE_REPO" commit -q -m seed
+git -C "$UNSAFE_REPO" checkout -q -b feature/probe
+
+# Simulate a merge-in-progress by creating MERGE_HEAD marker
+UNSAFE_GITDIR="$(git -C "$UNSAFE_REPO" rev-parse --git-dir)"
+case "$UNSAFE_GITDIR" in
+  /*) ;;
+  *) UNSAFE_GITDIR="$UNSAFE_REPO/$UNSAFE_GITDIR" ;;
+esac
+echo "$(git -C "$UNSAFE_REPO" rev-parse HEAD)" > "$UNSAFE_GITDIR/MERGE_HEAD"
+
+set +e
+"$RECONCILE" "$UNSAFE_REPO/.planning/features/probe/feature.md" --repo "$UNSAFE_REPO" >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" == "1" ]]; then
+  echo -e "  ${GREEN}PASS${NC}: reconcile refuses during pending merge"
+  PASS=$((PASS + 1))
+else
+  echo -e "  ${RED}FAIL${NC}: reconcile did not refuse (exit $rc)"
+  FAIL=$((FAIL + 1))
+fi
+
+# Clean up MERGE_HEAD — confirm reconcile works again
+rm "$UNSAFE_GITDIR/MERGE_HEAD"
+set +e
+"$RECONCILE" "$UNSAFE_REPO/.planning/features/probe/feature.md" --repo "$UNSAFE_REPO" >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" == "0" || "$rc" == "2" ]]; then
+  echo -e "  ${GREEN}PASS${NC}: reconcile runs once merge marker is cleared"
+  PASS=$((PASS + 1))
+else
+  echo -e "  ${RED}FAIL${NC}: reconcile failed unexpectedly (exit $rc)"
+  FAIL=$((FAIL + 1))
+fi
+
+# ── --apply is accepted as alias for --fix ────────────────────────
+echo ""
+echo -e "${YELLOW}=== --apply alias accepted ===${NC}"
+set +e
+"$RECONCILE" "$UNSAFE_REPO/.planning/features/probe/feature.md" --repo "$UNSAFE_REPO" --apply >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" == "0" ]]; then
+  echo -e "  ${GREEN}PASS${NC}: --apply accepted (exit 0)"
+  PASS=$((PASS + 1))
+else
+  echo -e "  ${RED}FAIL${NC}: --apply rejected (exit $rc)"
+  FAIL=$((FAIL + 1))
+fi
 
 # ============================================================
 # Summary
