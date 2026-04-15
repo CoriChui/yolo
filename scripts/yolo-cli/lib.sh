@@ -162,20 +162,34 @@ parse_trailer() {
 }
 
 # ── get_current_phase ──────────────────────────────────────────────
-# Derive the current phase from the latest commit's YOLO-Phase trailer.
+# Derive the current phase from the latest commit's YOLO-Phase trailer
+# whose YOLO-Feature trailer matches the active feature slug.
 # Usage: get_current_phase [<repo_path>] [<branch>]
-# Walks commits on the current branch (or specified branch) looking for the
-# most recent YOLO-Phase trailer. Empty if no trailer ever emitted.
+# Returns empty string if no matching trailer found (caller may default
+# to 'plan' for feature branches without task commits yet).
 get_current_phase() {
   local repo="${1:-.}" branch="${2:-HEAD}"
-  # Find the most recent commit whose message contains a YOLO-Phase trailer
-  local commit
-  commit="$(git -C "$repo" log -n 30 --format='%H' --grep='^YOLO-Phase:' "$branch" 2>/dev/null | head -1 || true)"
-  if [[ -z "$commit" ]]; then
-    printf ''
+  local slug
+  slug="$(get_active_feature "$repo" 2>/dev/null || true)"
+
+  # Scan recent commits for a YOLO-Phase trailer. If a feature is active,
+  # only accept trailers whose YOLO-Feature matches — avoids inheriting
+  # phase state from a parent branch's history.
+  local commit commit_slug commit_phase
+  while IFS= read -r commit; do
+    [[ -z "$commit" ]] && continue
+    commit_phase="$(parse_trailer "$repo" "$commit" "YOLO-Phase")"
+    [[ -z "$commit_phase" ]] && continue
+    if [[ -n "$slug" ]]; then
+      commit_slug="$(parse_trailer "$repo" "$commit" "YOLO-Feature")"
+      if [[ "$commit_slug" != "$slug" ]]; then
+        continue
+      fi
+    fi
+    printf '%s' "$commit_phase"
     return 0
-  fi
-  parse_trailer "$repo" "$commit" "YOLO-Phase"
+  done < <(git -C "$repo" log -n 50 --format='%H' --grep='^YOLO-Phase:' "$branch" 2>/dev/null || true)
+  printf ''
 }
 
 # ── is_path_in_scope ───────────────────────────────────────────────
