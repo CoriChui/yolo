@@ -3,45 +3,33 @@
 # Source this file; do not execute directly.
 set -euo pipefail
 
-# ── slugify ─────────────────────────────────────────────────────────
-# Convert arbitrary text to a kebab-case slug.
-#   - lowercase
-#   - only alphanumeric + hyphens
-#   - collapse consecutive hyphens
-#   - trim leading/trailing hyphens
-#   - max 50 characters (trim at last full word-boundary hyphen if possible)
-slugify() {
-  local text="${1:-}"
-  # Lowercase
-  text="${text,,}"
-  # Replace non-alphanumeric characters with hyphens
-  text="$(printf '%s' "$text" | tr -cs 'a-z0-9' '-')"
-  # Collapse multiple hyphens into one
-  text="$(printf '%s' "$text" | sed 's/-\{2,\}/-/g')"
-  # Trim leading/trailing hyphens
-  text="${text#-}"
-  text="${text%-}"
-  # Truncate to 50 chars — trim at last hyphen to avoid partial words
-  if (( ${#text} > 50 )); then
-    text="${text:0:50}"
-    # If the cut landed mid-word, trim back to last hyphen
-    if [[ "${1,,}" != "" ]] && [[ "${text: -1}" != "-" ]]; then
-      text="${text%-*}"
-    fi
-    text="${text%-}"
-  fi
-  printf '%s' "$text"
-}
+# ── shared constants ───────────────────────────────────────────────
+# Unified skip/disable marker patterns for test integrity checks.
+# Used by commit.sh (pre-commit) and verify-commit.sh (post-commit).
+YOLO_SKIP_PATTERNS='\.(skip|only)\b|xit\(|xdescribe\(|@pytest\.mark\.skip|@unittest\.skip|@disabled|@Disabled|#\[ignore\]'
+
+# Unified test file detection patterns — used by commit.sh and verify-commit.sh.
+# grep -E regex pattern (for commit.sh pre-commit checks)
+YOLO_TEST_FILE_GREP='(\.test\.|\.spec\.|_test\.|(^|/)test_|__tests__/|tests/)'
+# git pathspec patterns (for verify-commit.sh post-commit checks)
+YOLO_TEST_FILE_PATHSPECS=('*.test.*' '*.spec.*' '*_test.*' '*/test_*' 'test_*' '*/__tests__/*' '__tests__/*' 'tests/*' '*/tests/*')
 
 # ── parse_frontmatter ──────────────────────────────────────────────
 # Extract a YAML frontmatter field value from a file.
 # Usage: parse_frontmatter <file> <field>
-# Returns the raw value (after "field: ") or empty string if not found.
+# Returns the raw value (after "field: " or "field:") or empty string if not found.
+# Note: handles both "field: value" and "field:value" (YAML allows both).
 parse_frontmatter() {
-  local file="$1" field="$2"
-  local in_frontmatter=0 line
+  local file="${1:-}" field="${2:-}"
+  if [[ -z "$file" || -z "$field" ]]; then
+    printf ''
+    return 0
+  fi
+  [[ -f "$file" ]] || { printf ''; return 0; }
+  local in_frontmatter=0 line line_num=0
 
   while IFS= read -r line || [[ -n "$line" ]]; do
+    line_num=$(( line_num + 1 ))
     if [[ "$line" == "---" ]]; then
       if (( in_frontmatter )); then
         # End of frontmatter — stop scanning
@@ -51,10 +39,25 @@ parse_frontmatter() {
         continue
       fi
     fi
+    # Safety limit: frontmatter should not exceed ~50 lines
+    if (( in_frontmatter && line_num > 51 )); then
+      echo "Warning: frontmatter exceeds 50-line safety limit in $file" >&2
+      break
+    fi
     if (( in_frontmatter )); then
-      # Match "field: value" — value may contain colons, quotes, brackets, etc.
-      if [[ "$line" =~ ^${field}:\ (.*) ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
+      # Stop at first markdown heading (indicates body content, not frontmatter)
+      if [[ "$line" =~ ^##[[:space:]] ]]; then
+        break
+      fi
+      # Match "field: value" or "field:value" — handle optional space after colon
+      if [[ "$line" == "${field}: "* ]]; then
+        printf '%s' "${line#"${field}: "}"
+        return 0
+      elif [[ "$line" == "${field}:"* ]]; then
+        local val="${line#"${field}:"}"
+        # Trim leading whitespace (handles tabs or multiple spaces)
+        val="${val#"${val%%[![:space:]]*}"}"
+        printf '%s' "$val"
         return 0
       fi
     fi
@@ -63,80 +66,50 @@ parse_frontmatter() {
   printf ''
 }
 
-# ── parse_plan_tasks ───────────────────────────────────────────────
-# Extract task numbers from the ## Plan section.
-# Matches lines like: "1. [x] ..." or "2. [ ] ..."
-# Returns space-separated task numbers (e.g. "1 2 3").
-parse_plan_tasks() {
-  local file="$1"
-  local in_plan=0 numbers=() line
+# ── emit_json ──────────────────────────────────────────────────────
+# Build a JSON result object from pipe-separated warning/error strings.
+# Usage: emit_json <committed:true|false> <warnings_str> <errors_str>
+#
+# warnings_str / errors_str format: "type:detail|type:detail|..."
+#   - Empty string → empty array []
+#   - type is the portion before the first ':'
+#   - detail is everything after the first ':'
+#
+# Example:
+#   emit_json true "skip_added:foo.test.ts|skip_added:bar.test.ts" ""
+#   → {"committed":true,"warnings":[{"type":"skip_added","detail":"foo.test.ts"},{"type":"skip_added","detail":"bar.test.ts"}],"errors":[]}
+emit_json() {
+  local committed="${1:-false}"
+  local warnings_str="${2:-}"
+  local errors_str="${3:-}"
 
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    # Detect start of Plan section
-    if [[ "$line" =~ ^##[[:space:]]+Plan ]]; then
-      in_plan=1
-      continue
+  # Build a JSON array string from a pipe-separated entries string.
+  # Each entry has format "type:detail" (detail may contain colons).
+  _build_array() {
+    local entries_str="$1"
+    local result=""
+    if [[ -z "$entries_str" ]]; then
+      printf '[]'
+      return
     fi
-    # Detect start of any other section — stop
-    if (( in_plan )) && [[ "$line" =~ ^##[[:space:]] ]]; then
-      break
-    fi
-    if (( in_plan )); then
-      if [[ "$line" =~ ^([0-9]+)\.[[:space:]]+\[(x|X|\ )\] ]]; then
-        numbers+=("${BASH_REMATCH[1]}")
+    local IFS='|'
+    local entries
+    read -ra entries <<< "$entries_str"
+    for entry in "${entries[@]}"; do
+      local type="${entry%%:*}"
+      local detail="${entry#*:}"
+      if [[ -n "$result" ]]; then
+        result="${result},"
       fi
-    fi
-  done < "$file"
+      result="${result}{\"type\":\"${type}\",\"detail\":\"${detail}\"}"
+    done
+    printf '[%s]' "$result"
+  }
 
-  # Join with spaces
-  printf '%s' "${numbers[*]}"
-}
+  local warnings_json errors_json
+  warnings_json="$(_build_array "$warnings_str")"
+  errors_json="$(_build_array "$errors_str")"
 
-# ── count_plan_tasks ───────────────────────────────────────────────
-# Count total tasks in the ## Plan section.
-count_plan_tasks() {
-  local file="$1"
-  local tasks
-  tasks="$(parse_plan_tasks "$file")"
-  if [[ -z "$tasks" ]]; then
-    printf '0'
-    return
-  fi
-  # shellcheck disable=SC2086
-  set -- $tasks
-  printf '%s' "$#"
-}
-
-# ── get_checked_tasks ──────────────────────────────────────────────
-# Return space-separated task numbers for checked [x] checkboxes only.
-get_checked_tasks() {
-  local file="$1"
-  local in_plan=0 numbers=() line
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^##[[:space:]]+Plan ]]; then
-      in_plan=1
-      continue
-    fi
-    if (( in_plan )) && [[ "$line" =~ ^##[[:space:]] ]]; then
-      break
-    fi
-    if (( in_plan )); then
-      if [[ "$line" =~ ^([0-9]+)\.[[:space:]]+\[(x|X)\] ]]; then
-        numbers+=("${BASH_REMATCH[1]}")
-      fi
-    fi
-  done < "$file"
-
-  printf '%s' "${numbers[*]}"
-}
-
-# ── ensure_planning_dir ────────────────────────────────────────────
-# Create the .planning directory tree under the given root.
-# Idempotent — safe to call multiple times.
-ensure_planning_dir() {
-  local root="$1"
-  mkdir -p "$root/.planning/features/done"
-  mkdir -p "$root/.planning/decisions"
-  mkdir -p "$root/.planning/debug-sessions"
+  printf '{"committed":%s,"warnings":%s,"errors":%s}' \
+    "$committed" "$warnings_json" "$errors_json"
 }

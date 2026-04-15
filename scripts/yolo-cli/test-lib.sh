@@ -21,51 +21,9 @@ assert_eq() {
   fi
 }
 
-assert_dir_exists() {
-  local label="$1" dir="$2"
-  if [[ -d "$dir" ]]; then
-    echo "  PASS: $label"
-    PASS=$(( PASS + 1 ))
-  else
-    echo "  FAIL: $label — directory '$dir' does not exist"
-    FAIL=$(( FAIL + 1 ))
-  fi
-}
-
 # ── Temp workspace ──────────────────────────────────────────────────
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
-
-# ── slugify ─────────────────────────────────────────────────────────
-echo "=== slugify ==="
-
-assert_eq "basic phrase" \
-  "add-dark-mode-support" \
-  "$(slugify "Add dark mode support")"
-
-assert_eq "long string truncated at 50 chars, no trailing hyphen" \
-  "fix-the-null-pointer-in-auth-ts-line-45-and-also" \
-  "$(slugify "Fix the null pointer in auth.ts line 45 and also make sure it handles edge cases")"
-
-assert_eq "special characters stripped" \
-  "hello-world-123" \
-  "$(slugify "  Hello, World!!! 123  ")"
-
-assert_eq "collapses multiple hyphens" \
-  "foo-bar" \
-  "$(slugify "foo---bar")"
-
-assert_eq "leading/trailing hyphens trimmed" \
-  "inner" \
-  "$(slugify "---inner---")"
-
-assert_eq "empty input" \
-  "" \
-  "$(slugify "")"
-
-assert_eq "all special chars" \
-  "" \
-  "$(slugify "!@#\$%^&*()")"
 
 # ── parse_frontmatter ──────────────────────────────────────────────
 echo "=== parse_frontmatter ==="
@@ -108,106 +66,99 @@ assert_eq "missing field returns empty" \
   "" \
   "$(parse_frontmatter "$FEATURE_FILE" "nonexistent")"
 
-# ── parse_plan_tasks ────────────────────────────────────────────────
-echo "=== parse_plan_tasks ==="
-
-assert_eq "3-item plan" \
-  "1 2 3" \
-  "$(parse_plan_tasks "$FEATURE_FILE")"
-
-# File with no plan section
-NO_PLAN_FILE="$TMPDIR_TEST/no-plan.yaml"
-cat > "$NO_PLAN_FILE" <<'YAMLEOF'
----
-slug: test
----
-## Criteria
-- Something
+# Edge case: file with no frontmatter delimiters
+NO_FM_FILE="$TMPDIR_TEST/no-frontmatter.yaml"
+cat > "$NO_FM_FILE" <<'YAMLEOF'
+slug: no-frontmatter
+title: No delimiters here
 YAMLEOF
 
-assert_eq "no plan section returns empty" \
+assert_eq "no frontmatter delimiters returns empty" \
   "" \
-  "$(parse_plan_tasks "$NO_PLAN_FILE")"
+  "$(parse_frontmatter "$NO_FM_FILE" "slug")"
 
-# File with more tasks
-BIG_PLAN_FILE="$TMPDIR_TEST/big-plan.yaml"
-cat > "$BIG_PLAN_FILE" <<'YAMLEOF'
+# Edge case: file with unclosed frontmatter (single ---)
+UNCLOSED_FM_FILE="$TMPDIR_TEST/unclosed-fm.yaml"
+cat > "$UNCLOSED_FM_FILE" <<'YAMLEOF'
 ---
-slug: big
----
+slug: unclosed
+title: Unclosed frontmatter
 ## Plan
-1. [x] First task — abc1234
-2. [x] Second task — def5678
-3. [ ] Third task (test: pnpm test)
-4. [ ] Fourth task (test: none — trivial)
-5. [x] Fifth task — 1234567
-
-## Verification
-- Run all tests
+1. [ ] This should not be parsed as frontmatter
 YAMLEOF
 
-assert_eq "5-item plan" \
-  "1 2 3 4 5" \
-  "$(parse_plan_tasks "$BIG_PLAN_FILE")"
+assert_eq "unclosed frontmatter still extracts field" \
+  "unclosed" \
+  "$(parse_frontmatter "$UNCLOSED_FM_FILE" "slug")"
 
-# ── count_plan_tasks ────────────────────────────────────────────────
-echo "=== count_plan_tasks ==="
+# Edge case: empty file
+EMPTY_FILE="$TMPDIR_TEST/empty.yaml"
+: > "$EMPTY_FILE"
 
-assert_eq "count 3 tasks" \
-  "3" \
-  "$(count_plan_tasks "$FEATURE_FILE")"
-
-assert_eq "count 5 tasks" \
-  "5" \
-  "$(count_plan_tasks "$BIG_PLAN_FILE")"
-
-assert_eq "count 0 tasks (no plan)" \
-  "0" \
-  "$(count_plan_tasks "$NO_PLAN_FILE")"
-
-# ── get_checked_tasks ───────────────────────────────────────────────
-echo "=== get_checked_tasks ==="
-
-assert_eq "only checked from feature file" \
-  "1" \
-  "$(get_checked_tasks "$FEATURE_FILE")"
-
-assert_eq "checked from big plan" \
-  "1 2 5" \
-  "$(get_checked_tasks "$BIG_PLAN_FILE")"
-
-assert_eq "no checked in empty plan" \
+assert_eq "empty file returns empty" \
   "" \
-  "$(get_checked_tasks "$NO_PLAN_FILE")"
+  "$(parse_frontmatter "$EMPTY_FILE" "slug")"
 
-# All checked
-ALL_CHECKED_FILE="$TMPDIR_TEST/all-checked.yaml"
-cat > "$ALL_CHECKED_FILE" <<'YAMLEOF'
+# Edge case: non-existent file
+assert_eq "non-existent file returns empty" \
+  "" \
+  "$(parse_frontmatter "$TMPDIR_TEST/does-not-exist.yaml" "slug")"
+
+# Edge case: field value containing colons (e.g., URL)
+COLON_FILE="$TMPDIR_TEST/colon-value.yaml"
+cat > "$COLON_FILE" <<'YAMLEOF'
 ---
-slug: done
+url: http://example.com:8080/path
+slug: colon-test
 ---
-## Plan
-1. [x] Done one — aaa1111
-2. [x] Done two — bbb2222
 YAMLEOF
 
-assert_eq "all checked" \
-  "1 2" \
-  "$(get_checked_tasks "$ALL_CHECKED_FILE")"
+assert_eq "field with colon in value" \
+  "http://example.com:8080/path" \
+  "$(parse_frontmatter "$COLON_FILE" "url")"
 
-# ── ensure_planning_dir ────────────────────────────────────────────
-echo "=== ensure_planning_dir ==="
+# ── parse_frontmatter: 51-line safety limit ────────────────────────
+echo "=== parse_frontmatter 51-line safety limit ==="
 
-PLAN_ROOT="$TMPDIR_TEST/project"
-ensure_planning_dir "$PLAN_ROOT"
+LONG_FM_FILE="$TMPDIR_TEST/long-frontmatter.yaml"
+{
+  echo "---"
+  for i in $(seq 1 60); do
+    echo "field$i: value$i"
+  done
+  echo "---"
+} > "$LONG_FM_FILE"
 
-assert_dir_exists "features/done exists" "$PLAN_ROOT/.planning/features/done"
-assert_dir_exists "decisions exists"     "$PLAN_ROOT/.planning/decisions"
-assert_dir_exists "debug-sessions exists" "$PLAN_ROOT/.planning/debug-sessions"
+assert_eq "field at line 50 is found (within limit)" \
+  "value49" \
+  "$(parse_frontmatter "$LONG_FM_FILE" "field49")"
 
-# Idempotent — calling again should not error
-ensure_planning_dir "$PLAN_ROOT"
-assert_dir_exists "idempotent call" "$PLAN_ROOT/.planning/features/done"
+assert_eq "field at line 53 is NOT found (beyond limit)" \
+  "" \
+  "$(parse_frontmatter "$LONG_FM_FILE" "field52")"
+
+# ── emit_json ─────────────────────────────────────────────────────────
+echo "=== emit_json ==="
+
+assert_eq "empty warnings and errors" \
+  '{"committed":true,"warnings":[],"errors":[]}' \
+  "$(emit_json true "" "")"
+
+assert_eq "single warning" \
+  '{"committed":false,"warnings":[{"type":"test_count_decreased","detail":"auth.test.ts:5:3"}],"errors":[]}' \
+  "$(emit_json false "test_count_decreased:auth.test.ts:5:3" "")"
+
+assert_eq "multiple warnings pipe-separated" \
+  '{"committed":true,"warnings":[{"type":"skip_added","detail":"foo.test.ts"},{"type":"skip_added","detail":"bar.test.ts"}],"errors":[]}' \
+  "$(emit_json true "skip_added:foo.test.ts|skip_added:bar.test.ts" "")"
+
+assert_eq "with errors" \
+  '{"committed":false,"warnings":[],"errors":[{"type":"no_tests","detail":"missing coverage"}]}' \
+  "$(emit_json false "" "no_tests:missing coverage")"
+
+assert_eq "both warnings and errors" \
+  '{"committed":false,"warnings":[{"type":"skip_added","detail":"x.test.ts"}],"errors":[{"type":"no_tests","detail":"y.test.ts"}]}' \
+  "$(emit_json false "skip_added:x.test.ts" "no_tests:y.test.ts")"
 
 # ── Summary ─────────────────────────────────────────────────────────
 echo ""
