@@ -1,4 +1,4 @@
-# YOLO v2 Loop Orchestrator
+# YOLO Loop Orchestrator
 
 ## What This Is
 
@@ -6,13 +6,24 @@ You are the orchestrator — the Claude Code session coordinating the adaptive l
 You call yolo-cli scripts for deterministic work and spawn agents via the Task tool for creative work.
 
 **Invariant:** yolo-cli enforces correctness (commit prefixes, plan validation, reconciliation).
-You handle routing, context passing, and user interaction. Never duplicate what the CLI does.
+You handle routing, context passing, and user interaction.
 
 ## Prerequisites
 
 - `.planning/features/` directory exists — create if missing: `mkdir -p .planning/features/done .planning/decisions .planning/debug-sessions`
 - yolo-cli scripts at `scripts/yolo-cli/` (commit.sh, reconcile.sh, run-tests.sh, validate-plan.sh, verify-commit.sh)
-- Agent prompts at `.claude/yolo/v2/agents/` (execute.md, check.md)
+- Agent prompts at `.claude/yolo/agents/` (execute.md, check.md)
+
+## Arguments
+
+```
+"description"       → feature goal (quoted string)
+--context <path>    → file/URL to read before planning (repeatable)
+--research          → spawn research agent in Think step
+--just-do-it        → minimal think, skip user confirmation
+```
+
+(No args → resume mode. See "Resuming a Feature" section.)
 
 ## Variables
 
@@ -49,15 +60,30 @@ test_commands: ["{discovered test command, e.g. npm test}"]
 ```
 
 4. Create worktree: `git worktree add {worktree} -b {branch}`
-5. Confirm to user: "Created feature `{slug}` with worktree at `{worktree}`."
+5. **Set focus:** `echo "{slug}" > .planning/.focus`
+6. Confirm to user: "Created feature `{slug}` with worktree at `{worktree}`."
+7. **Load context (if `--context` provided):**
+   - For each `--context <path>`:
+     - If path starts with `http://` or `https://`: load via ToolSearch → WebFetch
+     - Otherwise: Read the local file
+     - Append content to `context_content` variable with a header: `\n--- Source: {path} ---\n`
+   - Write `## Context Sources` section to `{feature_file}`:
+     ```markdown
+     ## Context Sources
+     - {path1} (local file)
+     - {path2} (URL)
+     ```
+   - The raw content stays in orchestrator memory, NOT written to the feature file.
 
-### Step 2: Think (Phase 2 stub)
+### Step 2: Think
 
-Phase 1 behavior (if `--just-do-it` flag: skip to Step 3 after writing minimal criteria — "Feature works as described in the goal, all tests pass"):
-1. If `--just-do-it`: write minimal `## Criteria` section to `{feature_file}` (see below), then skip to Step 3
+**Level 0-1 (no `--research` flag):**
+
+1. If `--just-do-it`: write minimal `## Criteria` section ("Feature works as described in the goal, all tests pass"), skip to Step 3
 2. Read relevant files in the codebase to understand patterns and architecture
-3. Confirm with user: "I'll {description}. The codebase uses {patterns}. Correct?"
-4. On confirmation, write `## Context` and `## Criteria` sections to `{feature_file}`
+3. If `context_content` is available (from `--context`), read it and incorporate into understanding
+4. Confirm with user: "I'll {description}. The codebase uses {patterns}. Correct?"
+5. On confirmation, write `## Context` and `## Criteria` sections to `{feature_file}`
 
 ```markdown
 ## Context
@@ -75,12 +101,33 @@ For `--just-do-it`, write this minimal Criteria section:
 - All tests pass
 ```
 
-Phase 2: full think agent spawned via Task tool (not yet implemented).
+**Level 2 (`--research` flag):**
 
-### Step 3: Plan (Phase 2 stub)
+1. Read `.claude/yolo/agents/research.md` for agent prompt
+2. Spawn research agent via Task tool:
+   ```
+   Task(subagent_type: "general-purpose", model: "opus")
+   ```
+   Input:
+   - `goal`: feature description
+   - `scope`: project source directories (discovered from project structure)
+   - `context`: `context_content` string (from --context files, if any)
+3. Parse agent output (findings, relevant_files, patterns, gaps, concerns, suggestions, domain_model, business_rules, integration_map, open_questions)
+4. If `open_questions` has entries with `blocking: true`: present each to user via AskUserQuestion, record answers
+5. Write `## Research` section to `{feature_file}` with markdown summary
+6. Write `## Context` and `## Criteria` sections informed by research
+7. Store structured findings in memory for Step 3
 
-Phase 1 behavior:
+### Step 3: Plan
+
 1. User provides plan OR orchestrator writes plan based on discussion
+
+   **If research findings are available** (from Level 2 Think step):
+   - Every `gaps[]` entry should map to at least one task
+   - If `domain_model` has entities, mention relevant ones in task descriptions
+   - If `business_rules` exist, reference applicable rules in task constraints
+   - The plan format and validation (validate-plan.sh) are unchanged
+
 2. Write `## Plan` section to `{feature_file}` using this format:
 
 ```markdown
@@ -100,8 +147,6 @@ Phase 1 behavior:
 4. If validation fails: read errors, fix the plan, retry validation
 5. Confirm with user: "Plan has {N} tasks. Ready to execute?"
 
-Phase 2: full plan agent spawned via Task tool (not yet implemented).
-
 ### Step 4: Do
 
 Parse tasks from `## Plan` section of `{feature_file}`. Execute in dependency order.
@@ -112,7 +157,7 @@ Parse tasks from `## Plan` section of `{feature_file}`. Execute in dependency or
 2. Build predecessor context: if task depends on task-M, gather task-M's `files_changed` and `commit_message` from its output
 3. **Pre-execute snapshot:** Record HEAD before spawning: `pre_exec_head=$(git -C {worktree} rev-parse HEAD)`
 4. Spawn execute agent via Task tool:
-   - **prompt:** contents of `.claude/yolo/v2/agents/execute.md`
+   - **prompt:** contents of `.claude/yolo/agents/execute.md`
    - **input fields:**
      - `working_directory`: `{worktree}`
      - `task`: `{id, title, description, files, test_spec, depends_on}`
@@ -148,7 +193,7 @@ Parse tasks from `## Plan` section of `{feature_file}`. Execute in dependency or
 3. Read criteria from `## Criteria` section of `{feature_file}`
 4. **Pre-check snapshot:** Record HEAD before spawning: `pre_check_head=$(git -C {worktree} rev-parse HEAD)`
 5. Spawn check agent via Task tool:
-   - **prompt:** contents of `.claude/yolo/v2/agents/check.md`
+   - **prompt:** contents of `.claude/yolo/agents/check.md`
    - **input fields:**
      - `working_directory`: `{worktree}`
      - `criteria`: list of criteria strings from feature file
@@ -185,16 +230,24 @@ Parse tasks from `## Plan` section of `{feature_file}`. Execute in dependency or
    - **(c) Create PR:** `gh pr create --head {branch} --title "{goal}" --body "{summary}"`
    - **(d) Keep branch:** leave as-is for manual handling
 5. Move feature file: `mv {feature_file} .planning/features/done/`
-6. Remove worktree (unless option d): `git worktree remove {worktree}`
-7. Confirm: "Feature `{slug}` shipped."
+6. **Clear focus:** `rm -f .planning/.focus`
+7. Remove worktree (unless option d): `git worktree remove {worktree}`
+8. Confirm: "Feature `{slug}` shipped."
 
 ---
 
 ## Resuming a Feature
 
-When user says "resume {name}" or `/yolo:start` detects an existing feature file:
+When user says "resume {name}" or `/yolo:start` with no description:
 
+0. **Find feature to resume:**
+   - If `.planning/.focus` exists, read slug from it: `slug=$(cat .planning/.focus)`
+   - If `.planning/.focus` is missing, scan `.planning/features/*.md` (exclude `done/`):
+     - If exactly one feature file: use it
+     - If multiple: list them and ask user which to resume via AskUserQuestion
+     - If none: error "No features in progress. Start one with `/yolo:start \"description\"`"
 1. Read `{feature_file}` — extract goal, branch, worktree path
+1b. **Reload context:** If `## Context Sources` section exists in feature file, re-read each listed path. If a path is inaccessible (deleted file, URL down), warn user: "Context source {path} is no longer accessible." If `## Research` section exists, use it as cached research (do not re-spawn agent).
 2. Verify worktree exists; recreate if missing: `git worktree add {worktree} {branch}`
 3. **Check for [wip] commit as HEAD:** `git -C {worktree} log -1 --oneline | grep -F '[wip]'`. If found: `git -C {worktree} reset HEAD~1` to restore uncommitted state.
 4. Reconcile: `{cli}/reconcile.sh {feature_file} {branch} --apply --repo {worktree}`
@@ -218,7 +271,7 @@ When user says "resume {name}" or `/yolo:start` detects an existing feature file
 | "re-plan this" / "start over" | Reconcile, show completed tasks with keep/revert options. For each completed task: ask user to keep (still valid) or revert. Batch-confirm reverts, execute `git -C {worktree} revert <hash>` for each, then go to Step 3. |
 | "check this" / "verify" | Go to Step 5 (Check) |
 | "ship it" / "merge" | Go to Step 6 (Ship) |
-| "park this" / "stop" | Check `git status` in worktree; if uncommitted changes: `{cli}/commit.sh wip --repo {worktree} --stage`, then switch to main |
+| "park this" / "stop" | Check `git status` in worktree; if uncommitted changes: `{cli}/commit.sh wip --repo {worktree} --stage`. Clear focus: `rm -f .planning/.focus`. Switch to main. |
 | "skip this task" | Mark current task skipped, continue to next |
 | "full check" | Force full check mode in Step 5 |
 | "status" | Run reconcile, show current step + task progress |
@@ -227,12 +280,30 @@ When user says "resume {name}" or `/yolo:start` detects an existing feature file
 
 ---
 
-## Context Compaction
+## Context Management
 
-After each step completes and its output is written to `{feature_file}`:
-1. Summarize what happened in one line (e.g., "Step 4 complete: 5/5 tasks committed")
-2. The feature file holds the durable output — do not retain step working data in memory
-3. On resume or step transition, re-read `{feature_file}` for current state
+**Principle:** Each agent gets the minimum context it needs. The orchestrator discards working data after each step.
+
+### Agent Spawning
+- Load agent prompt file only when spawning that agent (do not pre-read all agent files)
+- Pass only the input fields listed in the agent's Input section
+- Do NOT pass the full feature file to agents — extract the specific fields they need
+- Do NOT pass prior agent outputs to subsequent agents unless explicitly required (e.g., research findings → plan step)
+
+### Between Steps
+- After each step completes, write durable output to `{feature_file}`
+- Summarize what happened in one line (e.g., "Step 4 complete: 5/5 tasks committed")
+- Discard step working data from memory — the feature file is the record
+- On resume or step transition, re-read `{feature_file}` for current state
+
+### Agent Output Handling
+- When an agent returns, extract only the structured fields needed for the next step
+- Do not retain the agent's full response text in the orchestrator's context
+- If the agent produced verbose output, summarize it before storing
+
+### Multi-Feature Sessions
+- If running multiple features sequentially, start each with a fresh context read of `{feature_file}`
+- Do not carry context from a completed feature into the next one
 
 ---
 
@@ -249,9 +320,8 @@ After each step completes and its output is written to `{feature_file}`:
 
 ---
 
-## Deferred to Phase 2+
+## Deferred
 
-- **Direct commit path:** Small changes (<=3 files AND <=20 lines) should skip worktree and plan. Not yet implemented.
-- **Session locking:** `locked_by: session-{id}` in feature file frontmatter. Not yet implemented.
-- **Full think agent:** Currently a manual stub. Phase 2 will spawn a dedicated think agent.
-- **Full plan agent:** Currently a manual stub. Phase 2 will spawn a dedicated plan agent.
+- **Direct commit path:** Small changes (<=3 files AND <=20 lines) should skip worktree and plan.
+- **Session locking:** `locked_by: session-{id}` in feature file frontmatter.
+- **JSON sensor integration:** Orchestrator parses --json output from commit.sh/validate-plan.sh for programmatic warning handling. Currently reads human-readable WARNING lines from stderr.

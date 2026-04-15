@@ -75,7 +75,7 @@ caching, and test/doc polish.
   - test: bash scripts/yolo-cli/test-active-feature.sh
 
 7. [ ] Sweep the docs to use `--apply` as the canonical reconcile flag while keeping `--fix` as a documented alias, isolate all tests with `GIT_CONFIG_GLOBAL=/dev/null`/`HOME="$TMPDIR_TEST"` to avoid user gpg/sign config interference, add stderr content assertions to hook tests so block-message regressions are caught, and add test cases for quoted paths, chained commands with `&&`, and nested feature slugs like `feature/foo/bar`
-  - files: .claude/yolo/loop.md, .claude/yolo/reference/scripts.md, docs/getting-started.md, scripts/yolo-cli/test-hook-pre-write.sh, scripts/yolo-cli/test-hook-pre-bash.sh, scripts/yolo-cli/test-active-feature.sh, scripts/yolo-cli/test-lib.sh
+  - files: .claude/yolo/loop.md, .claude/yolo/v2/loop.md, .claude/yolo/reference/scripts.md, .claude/commands/yolo/status.md, docs/getting-started.md, scripts/yolo-cli/test-hook-pre-write.sh, scripts/yolo-cli/test-hook-pre-bash.sh, scripts/yolo-cli/test-active-feature.sh, scripts/yolo-cli/test-lib.sh
   - test: bash scripts/yolo-cli/test-hook-pre-bash.sh && bash scripts/yolo-cli/test-hook-pre-write.sh
 
 ## Verification

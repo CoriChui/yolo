@@ -22,6 +22,11 @@ assert_exit() {
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
 
+# Isolate from user's global git config (signing keys, commit hooks).
+export HOME="$TMPDIR_TEST"
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_NOSYSTEM=1
+
 # ── Fixture: repo with a feature and plan ──────────────────────────
 REPO="$TMPDIR_TEST/repo"
 mkdir -p "$REPO/.planning/features/auth"
@@ -133,6 +138,49 @@ printf '{}' | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" >/dev/null 2>&1
 rc=$?
 set -e
 assert_exit "empty JSON body → allowed (no target to check)" "0" "$rc"
+
+# ── Block message content assertion (stderr grep) ─────────────────
+# Earlier tests switched to feature/no-plan — switch back to feature/auth.
+git -C "$REPO" checkout -q feature/auth 2>/dev/null || true
+echo "=== block message mentions scope violation ==="
+set +e
+stderr_out=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"src/unrelated.ts"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" 2>&1 >/dev/null)
+rc=$?
+set -e
+assert_exit "block exits 2" "2" "$rc"
+if [[ "$stderr_out" == *"not in the plan scope"* ]]; then
+  echo "  PASS: stderr contains 'not in the plan scope'"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: stderr missing scope message: $stderr_out"
+  FAIL=$(( FAIL + 1 ))
+fi
+if [[ "$stderr_out" == *"'auth'"* ]]; then
+  echo "  PASS: stderr names the active feature"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: stderr does not name the feature: $stderr_out"
+  FAIL=$(( FAIL + 1 ))
+fi
+
+# ── Quoted/spaced path handling ───────────────────────────────────
+echo "=== quoted/spaced paths ==="
+# Add a file with a space to the plan
+cat > "$REPO/.planning/features/auth/feature.md" <<'FEATURE'
+---
+branch: feature/auth
+---
+
+## Plan
+1. [ ] Login module
+  - files: src/login.ts, "src/with space.ts"
+  - test: none
+FEATURE
+git -C "$REPO" add .planning && git -C "$REPO" commit -q -m "expand plan"
+
+rc=$(call_hook "Edit" "src/with space.ts" "$REPO")
+assert_exit "quoted entry in plan allows path with space" "0" "$rc"
 
 # ── Malformed JSON fails closed ────────────────────────────────────
 echo "=== malformed JSON fails closed (exit 2) ==="

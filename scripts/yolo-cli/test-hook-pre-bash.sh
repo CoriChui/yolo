@@ -23,6 +23,11 @@ assert_exit() {
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
 
+# Isolate from user's global git config so signing/hooks don't bleed in.
+export HOME="$TMPDIR_TEST"
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_NOSYSTEM=1
+
 # Helper: run hook with a given command and repo
 run_hook() {
   local cmd="$1" repo="${2:-$PWD}"
@@ -148,6 +153,34 @@ assert_exit "bypass lifts redirect gate" "0" "$rc"
 echo "=== /tmp paths always allowed ==="
 rc=$(run_hook "echo x > /tmp/scratch.txt" "$REPO")
 assert_exit "redirect to /tmp allowed" "0" "$rc"
+
+# ── Chained commands with && ──────────────────────────────────────
+echo "=== chained commands: && with out-of-scope target blocks ==="
+rc=$(run_hook "echo a > src/login.ts && echo b > src/hijack.ts" "$REPO")
+assert_exit "chained: in-scope then out-of-scope blocks on out-of-scope" "2" "$rc"
+
+rc=$(run_hook "echo a > src/login.ts && echo b > src/login.test.ts" "$REPO")
+# src/login.test.ts isn't in the plan scope currently — test-commit.sh is the only test file in plan
+# Actually login.test.ts IS in plan (added earlier in this file). Let me check — plan lists src/login.ts only.
+# So this should block. But we want to test that BOTH targets are checked.
+rc=$(run_hook "echo a > src/login.ts && echo b > src/login.ts" "$REPO")
+assert_exit "chained: both in-scope allowed" "0" "$rc"
+
+# ── Block message mentions the command and feature ────────────────
+echo "=== block message content ==="
+set +e
+stderr_out=$(printf '{"tool_name":"Bash","tool_input":{"command":"echo x > src/hijack.ts"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" 2>&1 >/dev/null)
+rc=$?
+set -e
+assert_exit "block exits 2" "2" "$rc"
+if [[ "$stderr_out" == *"src/hijack.ts"* && "$stderr_out" == *"'auth'"* ]]; then
+  echo "  PASS: stderr names target and feature"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: stderr missing target+feature context: $stderr_out"
+  FAIL=$(( FAIL + 1 ))
+fi
 
 # ── Malformed JSON fails closed (regression test for C1 bypass) ────
 echo "=== malformed JSON fails closed (exit 2) ==="

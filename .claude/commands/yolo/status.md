@@ -14,7 +14,7 @@ allowed-tools:
 <objective>
 Display overall project status by reconciling all feature files against git evidence.
 Reports each feature's derived step, drift status, and suggests next actions.
-Note: Write/Edit are needed for --fix reconciliation (crash recovery corrections).
+Note: Write/Edit are needed for --apply reconciliation (crash recovery corrections).
 </objective>
 
 <context>
@@ -39,7 +39,7 @@ Arguments: $ARGUMENTS
      ...
    Completed Features: {count}
    ```
-5. **If $ARGUMENTS contains "--fix":** re-run reconcile with `--fix` on all features with drift
+5. **If $ARGUMENTS contains "--apply":** re-run reconcile with `--apply` on all features with drift
 6. **Suggest next action** based on the active feature's step:
    - `think` → "Run `/yolo:start` to continue planning"
    - `plan` → "Plan exists but no tasks started — run `/yolo:start` to begin execution"
