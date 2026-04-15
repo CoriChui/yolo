@@ -51,6 +51,18 @@ for pattern in "${BLOCKED_PATTERNS[@]}"; do
   fi
 done
 
+# ── Snapshot working-tree state for the post-bash delta check ──────
+# The post-bash hook compares this snapshot against git status after the
+# command runs and acts only on the delta (changes produced by THIS
+# command), not on pre-existing dirty state.
+_snapshot_worktree() {
+  local repo="${CLAUDE_PROJECT_DIR:-$PWD}"
+  [[ -d "$repo/.git" || -f "$repo/.git" ]] || return 0
+  local snap="/tmp/yolo-snap-${PPID:-$$}.txt"
+  git -C "$repo" status --porcelain 2>/dev/null > "$snap" || true
+}
+_snapshot_worktree
+
 # ── 2. Write-redirection scope gate ──────────────────────────────────
 # Only applies when a feature is active. On main (no feature), trust the user.
 REPO="${CLAUDE_PROJECT_DIR:-$PWD}"

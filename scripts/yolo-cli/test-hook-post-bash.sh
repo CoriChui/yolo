@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# test-hook-post-bash.sh — tests for the PostToolUse Bash diff enforcement.
+# test-hook-post-bash.sh — tests for the snapshot-based PostToolUse Bash hook.
+# Verifies: (a) only delta changes are acted on, not pre-existing dirty state;
+# (b) report-only by default, no destructive mutations;
+# (c) YOLO_POST_BASH_REVERT=1 enables opt-in revert.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK="$SCRIPT_DIR/hook-post-bash.sh"
+PRE_HOOK="$SCRIPT_DIR/hook-pre-bash.sh"
+POST_HOOK="$SCRIPT_DIR/hook-post-bash.sh"
 
 PASS=0
 FAIL=0
@@ -15,17 +19,6 @@ assert_exit() {
     PASS=$(( PASS + 1 ))
   else
     echo "  FAIL: $label — expected exit $expected, got $actual"
-    FAIL=$(( FAIL + 1 ))
-  fi
-}
-
-assert_file_absent() {
-  local label="$1" path="$2"
-  if [[ ! -e "$path" ]]; then
-    echo "  PASS: $label (file absent)"
-    PASS=$(( PASS + 1 ))
-  else
-    echo "  FAIL: $label — file still present at $path"
     FAIL=$(( FAIL + 1 ))
   fi
 }
@@ -43,10 +36,32 @@ assert_file_content_eq() {
   fi
 }
 
-TMPDIR_TEST="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_TEST"' EXIT
+assert_file_present() {
+  local label="$1" path="$2"
+  if [[ -e "$path" ]]; then
+    echo "  PASS: $label (present)"
+    PASS=$(( PASS + 1 ))
+  else
+    echo "  FAIL: $label — file missing"
+    FAIL=$(( FAIL + 1 ))
+  fi
+}
 
-# ── Fixture: repo + feature + feature branch ──────────────────────
+assert_file_absent() {
+  local label="$1" path="$2"
+  if [[ ! -e "$path" ]]; then
+    echo "  PASS: $label (absent)"
+    PASS=$(( PASS + 1 ))
+  else
+    echo "  FAIL: $label — file still present"
+    FAIL=$(( FAIL + 1 ))
+  fi
+}
+
+TMPDIR_TEST="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR_TEST" /tmp/yolo-snap-$$.txt' EXIT
+
+# ── Fixture ────────────────────────────────────────────────────────
 REPO="$TMPDIR_TEST/repo"
 mkdir -p "$REPO/.planning/features/auth" "$REPO/src"
 git -C "$REPO" init -q -b main
@@ -70,94 +85,118 @@ git -C "$REPO" add .planning src
 git -C "$REPO" commit -q -m "seed"
 git -C "$REPO" checkout -q -b feature/auth
 
-run_hook() {
+# The hook uses PPID of the hook subprocess as the snapshot key. When we
+# invoke via the test shell, PPID is our $$ (the test process).
+SNAP_PPID="$$"
+export SNAP_FILE="/tmp/yolo-snap-${SNAP_PPID}.txt"
+# Clean any stale snapshot
+rm -f "$SNAP_FILE"
+
+# Helper: run pre-hook to snapshot, then run the simulated command (via the
+# shell — not a Bash tool call), then run post-hook and capture its exit.
+simulate_bash_call() {
+  local cmd_script="$1"
+  # Pre-hook snapshot
   set +e
-  printf '{"tool_name":"Bash","tool_input":{"command":"some cmd"}}' \
-    | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" >/dev/null 2>&1
+  printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd_script" \
+    | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1
+  set -e
+  # Run the simulated command in the repo (but only its effect on files)
+  eval "$cmd_script"
+  # Post-hook check
+  set +e
+  printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd_script" \
+    | CLAUDE_PROJECT_DIR="$REPO" "$POST_HOOK" >/dev/null 2>&1
   local rc=$?
   set -e
   printf '%s' "$rc"
 }
 
-# ── No changes → exit 0 ────────────────────────────────────────────
-echo "=== clean worktree ==="
-rc=$(run_hook)
-assert_exit "clean worktree exits 0" "0" "$rc"
+# ── Pre-existing dirty state is IGNORED (the bug fix) ──────────────
+echo "=== pre-existing dirty state ignored ==="
+# Seed the worktree with pre-existing dirty state BEFORE taking a snapshot
+echo "pre-existing-dirty" > "$REPO/src/other.ts"
+# Now run pre+post with a NO-OP command
+rc=$(simulate_bash_call "true")
+assert_exit "no-op command + pre-existing dirt → exit 0" "0" "$rc"
+assert_file_content_eq "pre-existing dirty file NOT reverted" "$REPO/src/other.ts" "pre-existing-dirty"
 
-# ── In-scope modification preserved ───────────────────────────────
-echo "=== in-scope modification preserved ==="
-echo "updated" > "$REPO/src/login.ts"
-rc=$(run_hook)
-assert_exit "in-scope modification exits 0" "0" "$rc"
-assert_file_content_eq "in-scope file content preserved" "$REPO/src/login.ts" "updated"
+# ── Out-of-scope change produced BY the command is reported ────────
+echo "=== out-of-scope delta reported (no revert by default) ==="
+# Reset to clean baseline for this scenario
+git -C "$REPO" checkout -q -- .
+rc=$(simulate_bash_call "echo produced > $REPO/src/hijack.ts")
+assert_exit "out-of-scope delta reports (exit 2)" "2" "$rc"
+assert_file_present "file NOT reverted (report-only default)" "$REPO/src/hijack.ts"
+rm -f "$REPO/src/hijack.ts"
 
-# Clean up
+# ── In-scope change produced BY the command passes through ─────────
+echo "=== in-scope delta allowed ==="
+git -C "$REPO" checkout -q -- .
+rc=$(simulate_bash_call "echo updated > $REPO/src/login.ts")
+assert_exit "in-scope delta passes (exit 0)" "0" "$rc"
+assert_file_content_eq "in-scope content preserved" "$REPO/src/login.ts" "updated"
 git -C "$REPO" checkout -q -- .
 
-# ── Out-of-scope modification reverted ─────────────────────────────
-echo "=== out-of-scope modification reverted ==="
+# ── YOLO_POST_BASH_REVERT=1 performs the revert ───────────────────
+echo "=== opt-in revert via YOLO_POST_BASH_REVERT=1 ==="
+rm -f "$SNAP_FILE"
+# Pre-hook snapshot
+printf '{"tool_name":"Bash","tool_input":{"command":"echo x > f"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
+# Produce an out-of-scope change
 echo "hijack" > "$REPO/src/other.ts"
-rc=$(run_hook)
-assert_exit "out-of-scope modification blocks (exit 2)" "2" "$rc"
-assert_file_content_eq "out-of-scope file restored to HEAD" "$REPO/src/other.ts" "original"
-
-# ── Out-of-scope new file removed ─────────────────────────────────
-echo "=== out-of-scope new file removed ==="
-echo "hijack" > "$REPO/src/hijack.ts"
-rc=$(run_hook)
-assert_exit "out-of-scope new file blocks (exit 2)" "2" "$rc"
-assert_file_absent "out-of-scope new file removed" "$REPO/src/hijack.ts"
-
-# ── Out-of-scope deletion restored ────────────────────────────────
-echo "=== out-of-scope deletion restored ==="
-rm "$REPO/src/other.ts"
-rc=$(run_hook)
-assert_exit "out-of-scope deletion blocks (exit 2)" "2" "$rc"
-assert_file_content_eq "out-of-scope deleted file restored" "$REPO/src/other.ts" "original"
-
-# ── Mixed: in-scope + out-of-scope changes ────────────────────────
-echo "=== mixed in-scope + out-of-scope ==="
-echo "legit-update" > "$REPO/src/login.ts"
-echo "hijack" > "$REPO/src/other.ts"
-rc=$(run_hook)
-assert_exit "mixed changes block (exit 2)" "2" "$rc"
-assert_file_content_eq "in-scope change preserved" "$REPO/src/login.ts" "legit-update"
-assert_file_content_eq "out-of-scope change reverted" "$REPO/src/other.ts" "original"
-
-# ── .planning edits always preserved ──────────────────────────────
-git -C "$REPO" checkout -q -- .
-echo "=== .planning/ edits preserved ==="
-mkdir -p "$REPO/.planning/decisions"
-echo "decision" > "$REPO/.planning/decisions/note.md"
-rc=$(run_hook)
-assert_exit ".planning edits not reverted" "0" "$rc"
-if [[ -f "$REPO/.planning/decisions/note.md" ]]; then
-  echo "  PASS: .planning file preserved"
-  PASS=$(( PASS + 1 ))
-else
-  echo "  FAIL: .planning file was reverted"
-  FAIL=$(( FAIL + 1 ))
-fi
-
-# ── No active feature (on main) → exit 0 ──────────────────────────
-echo "=== on main: no enforcement ==="
-git -C "$REPO" checkout -q main
-echo "anything" > "$REPO/anywhere.txt"
-rc=$(run_hook)
-assert_exit "no active feature exits 0" "0" "$rc"
-rm -f "$REPO/anywhere.txt"
-
-# ── YOLO_BYPASS=1 skips enforcement ───────────────────────────────
-git -C "$REPO" checkout -q feature/auth
-echo "=== YOLO_BYPASS=1 skips enforcement ==="
-echo "hijack" > "$REPO/src/other.ts"
+# Post-hook with revert enabled
 set +e
-printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
-  | CLAUDE_PROJECT_DIR="$REPO" YOLO_BYPASS=1 "$HOOK" >/dev/null 2>&1
+printf '{"tool_name":"Bash","tool_input":{"command":"echo x > f"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" YOLO_POST_BASH_REVERT=1 "$POST_HOOK" >/dev/null 2>&1
 rc=$?
 set -e
-assert_exit "bypass returns 0 without reverting" "0" "$rc"
-assert_file_content_eq "bypass preserved out-of-scope change" "$REPO/src/other.ts" "hijack"
+assert_exit "revert-mode exits 2" "2" "$rc"
+assert_file_content_eq "out-of-scope file reverted when opt-in" "$REPO/src/other.ts" "original"
+
+# ── YOLO_BYPASS=1 skips everything ────────────────────────────────
+echo "=== YOLO_BYPASS=1 skips enforcement ==="
+rm -f "$SNAP_FILE"
+printf '{"tool_name":"Bash","tool_input":{"command":"echo x > f"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
+echo "still-hijack" > "$REPO/src/other.ts"
+set +e
+printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" YOLO_BYPASS=1 "$POST_HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "bypass returns 0" "0" "$rc"
+assert_file_content_eq "bypass leaves file alone" "$REPO/src/other.ts" "still-hijack"
+git -C "$REPO" checkout -q -- .
+
+# ── No snapshot file → skip (fail-safe) ──────────────────────────
+echo "=== missing snapshot → skip (no revert) ==="
+rm -f "$SNAP_FILE"
+echo "hijack-no-snap" > "$REPO/src/other.ts"
+set +e
+printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$POST_HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "no snapshot → exit 0 (skip)" "0" "$rc"
+assert_file_content_eq "file preserved when no snapshot exists" "$REPO/src/other.ts" "hijack-no-snap"
+git -C "$REPO" checkout -q -- .
+
+# ── No active feature (on main) → skip ────────────────────────────
+echo "=== on main: no enforcement ==="
+git -C "$REPO" checkout -q main
+rm -f "$SNAP_FILE"
+printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
+echo "anything" > "$REPO/anywhere.txt"
+set +e
+printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$POST_HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "no active feature exits 0" "0" "$rc"
+rm -f "$REPO/anywhere.txt"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
