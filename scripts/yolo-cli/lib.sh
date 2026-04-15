@@ -192,52 +192,153 @@ get_current_phase() {
   printf ''
 }
 
-# ── is_path_in_scope ───────────────────────────────────────────────
-# Check whether a target path is in the active plan's declared file scope.
-# Usage: is_path_in_scope <feature_file> <target_path>
-# Returns 0 (true) if target is listed in any task's 'files:' annotation
-# OR the target lives under .planning/ (always in scope).
-# Returns 1 (false) otherwise.
-# Paths are normalized to workspace-relative; comparison is suffix-match
-# so absolute, relative, and './' variants all unify.
-is_path_in_scope() {
-  local feature_file="${1:-}" target="${2:-}"
-  if [[ -z "$target" ]]; then
-    return 1
-  fi
-  # .planning/ edits are always allowed (content layer, not code)
-  case "$target" in
-    */.planning/*|.planning/*|*/.planning|.planning) return 0 ;;
+# ── _normalize_path ───────────────────────────────────────────────
+# Lexical path normalization — no symlink follow, no filesystem lookup.
+# Relative paths are resolved against <repo_root>. '.' and '..' segments
+# are collapsed. Prints absolute path on stdout, empty string on error.
+# Usage: _normalize_path <path> <repo_root>
+_normalize_path() {
+  local p="${1:-}" repo="${2:-.}"
+  [[ -z "$p" ]] && return 1
+  # Ensure repo is absolute (caller should already provide absolute).
+  case "$repo" in
+    /*) ;;
+    *) repo="$(cd "$repo" 2>/dev/null && pwd -P)" || return 1 ;;
   esac
-  if [[ -z "$feature_file" || ! -f "$feature_file" ]]; then
+  case "$p" in
+    /*) ;;
+    *) p="$repo/$p" ;;
+  esac
+  # Split on '/' walking a stack. Use a saved IFS so we don't leak.
+  local saved_ifs="$IFS"
+  local IFS='/'
+  # shellcheck disable=SC2206
+  local parts=($p)
+  IFS="$saved_ifs"
+  local -a stack=()
+  local seg
+  for seg in "${parts[@]}"; do
+    case "$seg" in
+      ''|'.') ;;
+      '..') [[ ${#stack[@]} -gt 0 ]] && unset "stack[$(( ${#stack[@]} - 1 ))]" ;;
+      *) stack+=("$seg") ;;
+    esac
+  done
+  local out=""
+  for seg in "${stack[@]}"; do
+    out="${out}/${seg}"
+  done
+  [[ -z "$out" ]] && out="/"
+  printf '%s' "$out"
+}
+
+# ── is_path_in_scope ───────────────────────────────────────────────
+# Return 0 iff <target> is in the active plan's declared file scope.
+# Usage: is_path_in_scope <feature_file> <target_path> [<repo_root>]
+#
+# Policy:
+#   - target with no value → out of scope
+#   - target resolves to a path outside the repo → out of scope
+#   - target resolves under .planning/ in the repo → in scope (always)
+#   - target matches (by file equality or directory prefix) one of the
+#     entries under a task's 'files:' annotation → in scope
+#   - otherwise → out of scope
+#
+# Path handling is lexical (no symlinks followed), prefix-only (not
+# suffix), and glob-safe (set -f active during entry split).
+is_path_in_scope() {
+  local feature_file="${1:-}" target="${2:-}" repo="${3:-}"
+  [[ -z "$target" ]] && return 1
+
+  # Determine repo root.
+  if [[ -z "$repo" ]]; then
+    local search_dir="${feature_file:+$(dirname "$feature_file")}"
+    search_dir="${search_dir:-.}"
+    if ! repo="$(git -C "$search_dir" rev-parse --show-toplevel 2>/dev/null)"; then
+      repo="$(cd "$search_dir" 2>/dev/null && pwd -P)" || repo="$PWD"
+    fi
+  fi
+  if [[ ! -d "$repo" ]]; then
     return 1
   fi
-  # Normalize target to basename-ish form for suffix match
-  local t_norm="${target#./}"
-  # Parse plan section, collect every path listed after 'files:'
+  # Canonicalize repo, but use logical path (no symlink resolution) so that
+  # macOS's /var → /private/var symlink doesn't force absolute targets to
+  # start with /private/var while users pass /var. We use `pwd` (not -P)
+  # here; symlink handling is done separately via _normalize_path.
+  repo="$(cd "$repo" 2>/dev/null && pwd)" || return 1
+
+  # Normalize target.
+  local abs_target
+  abs_target="$(_normalize_path "$target" "$repo")" || return 1
+  [[ -z "$abs_target" ]] && return 1
+
+  # Reject anything outside the repo root (no '..' escapes).
+  case "$abs_target" in
+    "$repo"|"$repo"/*) ;;
+    *) return 1 ;;
+  esac
+
+  # Repo-relative path.
+  local rel="${abs_target#"$repo"}"
+  rel="${rel#/}"
+
+  # .planning/ is always in scope.
+  case "$rel" in
+    .planning|.planning/*) return 0 ;;
+  esac
+
+  [[ -z "$feature_file" || ! -f "$feature_file" ]] && return 1
+
+  # Walk the plan, split each 'files:' entry on commas with set -f active so
+  # glob chars (*, ?) in entries don't expand against the working directory.
+  local glob_was_off=1
+  case $- in *f*) glob_was_off=0 ;; esac
+  set -f
+
   local in_plan=0 line
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^##[[:space:]]+Plan ]]; then in_plan=1; continue; fi
     if (( in_plan )) && [[ "$line" =~ ^##[[:space:]] ]]; then break; fi
-    if (( in_plan )); then
-      # Extract the value after 'files:' on the same line (header or sub-line)
-      if [[ "$line" == *files:* ]]; then
-        local rest="${line#*files:}"
-        # Split on commas
-        local IFS=',' entry
-        for entry in $rest; do
-          # Trim leading/trailing whitespace and stray punctuation
-          entry="${entry#"${entry%%[![:space:]]*}"}"
-          entry="${entry%"${entry##*[![:space:]]}"}"
-          entry="${entry%.}"
-          [[ -z "$entry" ]] && continue
-          # Exact, relative-prefix, or suffix match
-          if [[ "$t_norm" == "$entry" || "$t_norm" == */"$entry" || "$entry" == */"$t_norm" ]]; then
-            return 0
-          fi
-        done
+    (( in_plan )) || continue
+    [[ "$line" == *files:* ]] || continue
+
+    local rest="${line#*files:}"
+    local saved_ifs="$IFS"
+    local IFS=','
+    # shellcheck disable=SC2206
+    local entries=($rest)
+    IFS="$saved_ifs"
+
+    local entry
+    for entry in "${entries[@]}"; do
+      # Trim whitespace at both ends
+      entry="${entry#"${entry%%[![:space:]]*}"}"
+      entry="${entry%"${entry##*[![:space:]]}"}"
+      # Strip matching surrounding quotes
+      [[ "$entry" == \"*\" ]] && entry="${entry#\"}" && entry="${entry%\"}"
+      [[ "$entry" == \'*\' ]] && entry="${entry#\'}" && entry="${entry%\'}"
+      # Strip a single trailing period (sentence punctuation)
+      entry="${entry%.}"
+      [[ -z "$entry" ]] && continue
+
+      local abs_entry entry_rel
+      abs_entry="$(_normalize_path "$entry" "$repo")" || continue
+      case "$abs_entry" in
+        "$repo"|"$repo"/*) ;;
+        *) continue ;;
+      esac
+      entry_rel="${abs_entry#"$repo"}"
+      entry_rel="${entry_rel#/}"
+      entry_rel="${entry_rel%/}"
+      [[ -z "$entry_rel" ]] && continue
+
+      if [[ "$rel" == "$entry_rel" || "$rel" == "$entry_rel"/* ]]; then
+        (( glob_was_off )) && set +f
+        return 0
       fi
-    fi
+    done
   done < "$feature_file"
+
+  (( glob_was_off )) && set +f
   return 1
 }

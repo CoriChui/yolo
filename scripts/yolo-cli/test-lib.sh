@@ -292,6 +292,102 @@ else
   assert_eq "no feature file + .planning/ path → in-scope" "pass" "fail"
 fi
 
+# ── Repo-boundary + path-normalization tests (C2 regression suite) ─
+echo ""
+echo "=== is_path_in_scope boundary/normalization ==="
+
+BOUND_REPO="$TMPDIR_TEST/bound-repo"
+mkdir -p "$BOUND_REPO"
+git -C "$BOUND_REPO" init -q -b main
+git -C "$BOUND_REPO" config user.email "t@t.t"
+git -C "$BOUND_REPO" config user.name "t"
+BOUND_FEATURE="$BOUND_REPO/feature.md"
+cat > "$BOUND_FEATURE" <<'FM'
+---
+branch: feature/bound
+---
+
+## Plan
+1. [ ] first
+  - files: src/auth.ts, src/service/
+  - test: none
+
+2. [ ] second
+  - files: "src/with space.ts", 'src/quoted.ts', src/glob-*.ts
+  - test: none
+FM
+
+# Absolute path OUTSIDE the repo that ends in an in-scope filename → block
+if is_path_in_scope "$BOUND_FEATURE" "/Users/konstantintsoy/evil/src/auth.ts" "$BOUND_REPO"; then
+  assert_eq "outside-repo absolute path with in-scope suffix blocked (was C2)" "pass" "fail"
+else
+  assert_eq "outside-repo absolute path with in-scope suffix blocked (was C2)" "pass" "pass"
+fi
+
+# `..` escape attempt resolves outside repo → block
+if is_path_in_scope "$BOUND_FEATURE" "../../etc/passwd" "$BOUND_REPO"; then
+  assert_eq ".. escape blocked" "pass" "fail"
+else
+  assert_eq ".. escape blocked" "pass" "pass"
+fi
+
+# Directory-prefix entry matches files inside → allow
+if is_path_in_scope "$BOUND_FEATURE" "src/service/login.ts" "$BOUND_REPO"; then
+  assert_eq "directory prefix match: src/service/login.ts" "pass" "pass"
+else
+  assert_eq "directory prefix match: src/service/login.ts" "pass" "fail"
+fi
+
+# Same basename but different directory → block
+if is_path_in_scope "$BOUND_FEATURE" "src/auth/login.ts" "$BOUND_REPO"; then
+  assert_eq "src/auth as file entry does NOT match src/auth/login.ts" "pass" "fail"
+else
+  assert_eq "src/auth as file entry does NOT match src/auth/login.ts" "pass" "pass"
+fi
+
+# Entry with spaces (quoted) — target passes when matched
+if is_path_in_scope "$BOUND_FEATURE" "src/with space.ts" "$BOUND_REPO"; then
+  assert_eq "quoted entry with space matches target with same space" "pass" "pass"
+else
+  assert_eq "quoted entry with space matches target with same space" "pass" "fail"
+fi
+
+# Single-quoted entry
+if is_path_in_scope "$BOUND_FEATURE" "src/quoted.ts" "$BOUND_REPO"; then
+  assert_eq "single-quoted entry matches" "pass" "pass"
+else
+  assert_eq "single-quoted entry matches" "pass" "fail"
+fi
+
+# Glob char in entry is NOT expanded — literal 'src/glob-*.ts' only matches that exact path
+touch "$BOUND_REPO/src-dummy-*-expand.ts" 2>/dev/null || true
+if is_path_in_scope "$BOUND_FEATURE" "src/glob-anything.ts" "$BOUND_REPO"; then
+  assert_eq "glob in entry does NOT expand to match arbitrary files" "pass" "fail"
+else
+  assert_eq "glob in entry does NOT expand to match arbitrary files" "pass" "pass"
+fi
+
+# Same absolute path as target (duplicates the in-scope src/auth.ts)
+if is_path_in_scope "$BOUND_FEATURE" "$BOUND_REPO/src/auth.ts" "$BOUND_REPO"; then
+  assert_eq "absolute in-repo in-scope path allowed" "pass" "pass"
+else
+  assert_eq "absolute in-repo in-scope path allowed" "pass" "fail"
+fi
+
+# Nested feature slug: feature/foo/nested → get_active_feature returns foo/nested
+BOUND_NEST="$TMPDIR_TEST/nested-repo"
+mkdir -p "$BOUND_NEST"
+git -C "$BOUND_NEST" init -q -b main
+git -C "$BOUND_NEST" config user.email "t@t.t"
+git -C "$BOUND_NEST" config user.name "t"
+echo seed > "$BOUND_NEST/seed"
+git -C "$BOUND_NEST" add seed
+git -C "$BOUND_NEST" commit -q -m seed
+git -C "$BOUND_NEST" checkout -q -b feature/group/nested-slug
+
+actual="$(get_active_feature "$BOUND_NEST" 2>/dev/null || printf '<none>')"
+assert_eq "get_active_feature reads nested slug correctly" "group/nested-slug" "$actual"
+
 # ── Summary ─────────────────────────────────────────────────────────
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
