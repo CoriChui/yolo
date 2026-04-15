@@ -15,10 +15,20 @@ source "$SCRIPT_DIR/lib.sh"
 # Read the tool input JSON from stdin
 INPUT=$(cat)
 
-# Extract the command being run
-COMMAND=$(printf '%s' "$INPUT" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+# Extract the command field via jq. We fail closed on parse error — a garbled
+# payload could be an injection attempt. jq is a required dependency.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Blocked: jq is required by YOLO hooks but not installed in PATH." >&2
+  exit 2
+fi
+
+if ! COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null); then
+  echo "Blocked: YOLO hook failed to parse Bash tool input as JSON." >&2
+  exit 2
+fi
 
 if [[ -z "$COMMAND" ]]; then
+  # Valid JSON but no command — treat as no-op (e.g., empty input). Allow.
   exit 0
 fi
 

@@ -134,6 +134,25 @@ rc=$?
 set -e
 assert_exit "empty JSON body → allowed (no target to check)" "0" "$rc"
 
+# ── Malformed JSON fails closed ────────────────────────────────────
+echo "=== malformed JSON fails closed (exit 2) ==="
+set +e
+printf '{not valid json' | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "malformed JSON → block" "2" "$rc"
+
+# ── file_path with embedded escaped quote survives parsing ─────────
+echo "=== escaped-quote in file_path parsed correctly ==="
+# JSON: {"tool_name":"Edit","tool_input":{"file_path":"src/\"quoted\".ts"}}
+# That path is not in scope; should block.
+set +e
+printf '{"tool_name":"Edit","tool_input":{"file_path":"src/\"quoted\".ts"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "escaped-quote path out-of-scope blocked" "2" "$rc"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if (( FAIL > 0 )); then

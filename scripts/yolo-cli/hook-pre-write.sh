@@ -16,24 +16,21 @@ source "$SCRIPT_DIR/lib.sh"
 # Read the tool-call JSON from stdin
 INPUT="$(cat)"
 
-# Extract tool name and the primary target path. Edit/Write/MultiEdit use
-# "file_path"; NotebookEdit uses "notebook_path".
-extract_field() {
-  local field="$1"
-  printf '%s' "$INPUT" \
-    | grep -o "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-    | head -1 \
-    | sed "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"//;s/\"$//" \
-    || true
-}
-
-TOOL="$(extract_field tool_name)"
-TARGET="$(extract_field file_path)"
-if [[ -z "$TARGET" ]]; then
-  TARGET="$(extract_field notebook_path)"
+# jq is required — fail closed if missing so malformed JSON cannot silently
+# bypass the gate. Edit/Write/MultiEdit expose the target as tool_input.file_path;
+# NotebookEdit uses tool_input.notebook_path.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Blocked: jq is required by YOLO hooks but not installed in PATH." >&2
+  exit 2
 fi
 
-# If we can't parse a target, don't block (fail-safe on parse error).
+if ! TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null) \
+  || ! TARGET=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // ""' 2>/dev/null); then
+  echo "Blocked: YOLO hook failed to parse Edit/Write tool input as JSON." >&2
+  exit 2
+fi
+
+# No target field present — allow (nothing to gate).
 if [[ -z "$TARGET" ]]; then
   exit 0
 fi

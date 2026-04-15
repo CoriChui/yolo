@@ -149,6 +149,33 @@ echo "=== /tmp paths always allowed ==="
 rc=$(run_hook "echo x > /tmp/scratch.txt" "$REPO")
 assert_exit "redirect to /tmp allowed" "0" "$rc"
 
+# ── Malformed JSON fails closed (regression test for C1 bypass) ────
+echo "=== malformed JSON fails closed (exit 2) ==="
+set +e
+printf '{this is not valid json' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "malformed JSON → block (not allow)" "2" "$rc"
+
+# ── Escaped-quote command is seen in full (C1 regression) ──────────
+# Prior regex would truncate at the first \" and miss the redirect.
+echo "=== escaped-quote command is fully parsed ==="
+# Build a JSON payload where the command contains escaped quotes before a redirect
+PAYLOAD='{"tool_name":"Bash","tool_input":{"command":"bash -c \"printf \\\"x\\\" > src/hijack.ts\""}}'
+set +e
+printf '%s' "$PAYLOAD" | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "escaped-quote redirect to out-of-scope blocked (was C1 bypass)" "2" "$rc"
+
+PAYLOAD_OK='{"tool_name":"Bash","tool_input":{"command":"bash -c \"printf \\\"x\\\" > src/login.ts\""}}'
+set +e
+printf '%s' "$PAYLOAD_OK" | CLAUDE_PROJECT_DIR="$REPO" "$HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "escaped-quote redirect to in-scope allowed" "0" "$rc"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if (( FAIL > 0 )); then
