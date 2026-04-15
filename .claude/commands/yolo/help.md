@@ -19,51 +19,54 @@ Self-contained command — no workflow or agent file. Read-only.
 ## No Arguments — Overview
 
 ```
-YOLO — You Only Live Once
-═════════════════════════
+YOLO — autonomous, feature-aware workflow framework
+═══════════════════════════════════════════════════
 
-Setup:
-  /yolo:init                   Initialize YOLO in project
-  /yolo:status                 Show project status
+How it works
+────────────
+YOLO has no action commands. Feature lifecycle is driven by:
 
-Releases:
-  /yolo:release new <slug>     Create pending release + intake
-  /yolo:release start [id] [--prompt]  Start release (research + features)
-  /yolo:release run [id] [--from <id>]  Run all features sequentially
-  /yolo:release status [id]    Show release state
-  /yolo:release end [id]       Complete release
+  • git state    — branch `feature/<slug>` defines the active feature;
+                   commit trailers (YOLO-Feature, YOLO-Phase) record phase
+  • .planning/   — human-authored feature specs, decisions, lessons
+  • PreToolUse   — Edit/Write/Bash writes are gated against the plan's
+                   file scope; out-of-scope writes are blocked (exit 2)
+  • PostToolUse  — `git status` delta is checked after every bash call;
+                   any out-of-scope change produced by the command is
+                   reported (revert via YOLO_POST_BASH_REVERT=1)
+  • StatusLine   — shows `yolo: <slug> · <phase>` when a feature is active
 
-Features:
-  /yolo:feature start <id> [--prompt]  Full pipeline (research → plan → execute → review → hook gate → verify → complete)
-  /yolo:feature add <name> [--prompt]  Add new feature to active release
-  /yolo:feature plan [--amend] [--prompt]  Create or amend execution plan
-  /yolo:feature verify [--force]      Check success criteria (auto-completes on pass; --force bypasses hook_gate_failed guard). Calling on in_progress skips hook gate; accepts verify_failed for re-verification
-  /yolo:feature complete              Finalize feature, create summary (requires passed verify; normally auto-called)
-  /yolo:feature status [id]           Show feature progress
+Starting or resuming work
+─────────────────────────
+Just describe what you want. Claude reads the branch, checks the plan,
+and drives the loop (think → plan → do → check → ship). You never type a
+slash command to begin work.
 
-Intake (auxiliary context per release):
-  /yolo:intake capture <source> [url] [--raw] [--release <id>] [--prompt]  Capture from 26 sources
-  /yolo:intake add <path> [--as <name>] [--release <id>] [--prompt]      Add local files as .md digests
-  /yolo:intake list [-r <id>]  List intake versions
-  /yolo:intake status [-r <id>] Show current version and stats
+Informational commands
+──────────────────────
+  /yolo:status      Show the active feature, phase, and any drift
+                    against git evidence. Use after context resets or
+                    when you suspect stuck state.
 
-Debugging:
-  /yolo:debug new <symptom> [--prompt]  Start a debug session (reproducer → root cause → failing test → fix)
-  /yolo:debug resume [id]      Resume an existing debug session
-  /yolo:debug list             List all debug sessions
-  /yolo:debug end <id>         Close a debug session
+  /yolo:help [cmd]  Show this overview, or details for a specific
+                    command.
 
-Other:
-  /yolo:decide [question]      Design decision with multi-perspective analysis
-  /yolo:help [command]         This help
+Escape hatches
+──────────────
+  YOLO_BYPASS=1               Skip pre-hook scope gate for one shell
+  YOLO_POST_BASH_REVERT=1     Enable auto-revert of out-of-scope writes
+  YOLO_NO_PHASE_CACHE=1       Bypass the status-line phase cache
 
-QUICK START
-───────────
-  /yolo:init
-  /yolo:release new mvp
-  /yolo:intake capture figma
-  /yolo:release start
-  /yolo:feature start 01
+Audit
+─────
+  .planning/.audit.log        Every gate block and bypass is recorded
+                              here (tab-separated: ts, event, hook,
+                              feature, target, extra)
+
+Extending a plan's scope
+────────────────────────
+If the gate blocks a legitimate edit, add the path to a task's
+`files:` annotation in the feature.md and the hook will let it through.
 ```
 
 ## With Argument — Command Details
