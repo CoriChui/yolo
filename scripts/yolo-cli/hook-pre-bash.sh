@@ -160,8 +160,10 @@ To proceed:
 EOF
     if [[ "${YOLO_BYPASS:-0}" == "1" ]]; then
       echo "YOLO bash gate: bypass honored (YOLO_BYPASS=1)" >&2
+      audit_log "$REPO" "bypass" "pre-bash" "$SLUG" "$t" "$COMMAND"
       exit 0
     fi
+    audit_log "$REPO" "block" "pre-bash" "$SLUG" "$t" "$COMMAND"
     exit 2
   fi
 done

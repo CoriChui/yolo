@@ -388,6 +388,61 @@ git -C "$BOUND_NEST" checkout -q -b feature/group/nested-slug
 actual="$(get_active_feature "$BOUND_NEST" 2>/dev/null || printf '<none>')"
 assert_eq "get_active_feature reads nested slug correctly" "group/nested-slug" "$actual"
 
+# ── audit_log ──────────────────────────────────────────────────────
+echo ""
+echo "=== audit_log ==="
+AUDIT_REPO="$TMPDIR_TEST/audit-repo"
+mkdir -p "$AUDIT_REPO"
+
+audit_log "$AUDIT_REPO" "block" "pre-write" "dark-mode" "src/hijack.ts" "Edit"
+audit_log "$AUDIT_REPO" "bypass" "pre-bash" "dark-mode" "src/other.ts" "echo x > src/other.ts"
+
+# File should be created
+if [[ -f "$AUDIT_REPO/.planning/.audit.log" ]]; then
+  echo "  PASS: .planning/.audit.log created"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: audit log not created"
+  FAIL=$(( FAIL + 1 ))
+fi
+
+# Two lines
+line_count=$(wc -l < "$AUDIT_REPO/.planning/.audit.log" | tr -d ' ')
+assert_eq "audit log has two lines after two calls" "2" "$line_count"
+
+# Each line has 6 tab-separated fields
+bad_lines=0
+while IFS= read -r line; do
+  field_count=$(awk -F'\t' '{print NF}' <<< "$line")
+  if [[ "$field_count" != "6" ]]; then
+    bad_lines=$(( bad_lines + 1 ))
+  fi
+done < "$AUDIT_REPO/.planning/.audit.log"
+assert_eq "every line has 6 tab-separated fields" "0" "$bad_lines"
+
+# Content sanity
+if grep -q $'block\tpre-write\tdark-mode\tsrc/hijack.ts' "$AUDIT_REPO/.planning/.audit.log"; then
+  echo "  PASS: block line content matches"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: block line content missing"
+  FAIL=$(( FAIL + 1 ))
+fi
+
+if grep -q $'bypass\tpre-bash\tdark-mode\tsrc/other.ts' "$AUDIT_REPO/.planning/.audit.log"; then
+  echo "  PASS: bypass line content matches"
+  PASS=$(( PASS + 1 ))
+else
+  echo "  FAIL: bypass line content missing"
+  FAIL=$(( FAIL + 1 ))
+fi
+
+# Tabs/newlines in fields are stripped
+audit_log "$AUDIT_REPO" "block" "pre-bash" "feat" $'path\twith\ttabs' $'multi\nline'
+tail_line="$(tail -1 "$AUDIT_REPO/.planning/.audit.log")"
+field_count=$(awk -F'\t' '{print NF}' <<< "$tail_line")
+assert_eq "tabs in fields stripped (still 6 fields)" "6" "$field_count"
+
 # ── Summary ─────────────────────────────────────────────────────────
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

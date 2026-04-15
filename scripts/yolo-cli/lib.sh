@@ -114,6 +114,42 @@ emit_json() {
     "$committed" "$warnings_json" "$errors_json"
 }
 
+# ── audit_log ───────────────────────────────────────────────────────
+# Append a tab-separated line to .planning/.audit.log recording a gate
+# decision. Used by pre/post hooks on block and bypass paths to provide
+# a durable, reviewable trail.
+#
+# Usage: audit_log <repo> <event> <hook> <feature> <target> <extra>
+#   event:   block | bypass | revert
+#   hook:    pre-bash | pre-write | post-bash
+#   feature: active feature slug (empty if none)
+#   target:  file path or command fragment
+#   extra:   free-form additional context (no tabs, no newlines)
+#
+# Line format:
+#   ISO-8601-UTC \t event \t hook \t feature \t target \t extra
+#
+# Creates .planning/ if missing. Silently swallows errors so failed
+# logging never breaks a session — audit is best-effort.
+audit_log() {
+  local repo="${1:-}" event="${2:-}" hook="${3:-}" feature="${4:-}" target="${5:-}" extra="${6:-}"
+  [[ -z "$repo" || -z "$event" ]] && return 0
+  local logdir="$repo/.planning"
+  local logfile="$logdir/.audit.log"
+  [[ -d "$logdir" ]] || mkdir -p "$logdir" 2>/dev/null || return 0
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  # Strip tabs/newlines from fields to keep the format parseable.
+  _strip_tabs() { printf '%s' "${1//$'\t'/ }" | tr -d '\n'; }
+  {
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$ts" "$event" "$hook" \
+      "$(_strip_tabs "$feature")" \
+      "$(_strip_tabs "$target")" \
+      "$(_strip_tabs "$extra")"
+  } >> "$logfile" 2>/dev/null || true
+}
+
 # ── get_active_feature ─────────────────────────────────────────────
 # Print the active feature slug derived from the current git branch.
 # Convention: branch matching 'feature/<slug>' → prints '<slug>'.

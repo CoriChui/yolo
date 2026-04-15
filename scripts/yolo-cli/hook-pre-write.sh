@@ -73,7 +73,9 @@ EOF
 # Respect an explicit environment override for one-off bypasses.
 if [[ "${YOLO_BYPASS:-0}" == "1" ]]; then
   echo "YOLO gate: bypass honored (YOLO_BYPASS=1)" >&2
+  audit_log "$REPO" "bypass" "pre-write" "$SLUG" "$TARGET" "${TOOL:-unknown}"
   exit 0
 fi
 
+audit_log "$REPO" "block" "pre-write" "$SLUG" "$TARGET" "${TOOL:-unknown}"
 exit 2
