@@ -160,6 +160,138 @@ assert_eq "both warnings and errors" \
   '{"committed":false,"warnings":[{"type":"skip_added","detail":"x.test.ts"}],"errors":[{"type":"no_tests","detail":"y.test.ts"}]}' \
   "$(emit_json false "skip_added:x.test.ts" "no_tests:y.test.ts")"
 
+# ── git helpers: setup shared repo fixture ──────────────────────────
+echo ""
+echo "=== git helpers (get_active_feature, parse_trailer, get_current_phase, is_path_in_scope) ==="
+
+REPO_FIX="$TMPDIR_TEST/git-helpers-repo"
+mkdir -p "$REPO_FIX"
+git -C "$REPO_FIX" init -q -b main
+git -C "$REPO_FIX" config user.email "test@example.com"
+git -C "$REPO_FIX" config user.name "test"
+echo "seed" > "$REPO_FIX/seed.txt"
+git -C "$REPO_FIX" add seed.txt
+git -C "$REPO_FIX" commit -q -m "seed"
+
+# ── get_active_feature ─────────────────────────────────────────────
+# On main — no active feature
+actual="$(get_active_feature "$REPO_FIX" 2>/dev/null || printf '<none>')"
+assert_eq "get_active_feature on main returns <none>" "<none>" "$actual"
+
+# On feature/dark-mode — slug is 'dark-mode'
+git -C "$REPO_FIX" checkout -q -b feature/dark-mode
+actual="$(get_active_feature "$REPO_FIX" 2>/dev/null || printf '<none>')"
+assert_eq "get_active_feature on feature/dark-mode returns slug" "dark-mode" "$actual"
+
+# On some-other-branch — no active feature
+git -C "$REPO_FIX" checkout -q -b some-other-branch
+actual="$(get_active_feature "$REPO_FIX" 2>/dev/null || printf '<none>')"
+assert_eq "get_active_feature on non-feature branch returns <none>" "<none>" "$actual"
+
+git -C "$REPO_FIX" checkout -q feature/dark-mode
+
+# ── parse_trailer ──────────────────────────────────────────────────
+# No trailers — empty
+actual="$(parse_trailer "$REPO_FIX" HEAD YOLO-Phase)"
+assert_eq "parse_trailer missing trailer returns empty" "" "$actual"
+
+# Add a commit with trailers
+echo "content" > "$REPO_FIX/work.txt"
+git -C "$REPO_FIX" add work.txt
+git -C "$REPO_FIX" commit -q -m "[task-1] do work
+
+YOLO-Feature: dark-mode
+YOLO-Phase: do"
+
+actual="$(parse_trailer "$REPO_FIX" HEAD YOLO-Feature)"
+assert_eq "parse_trailer extracts YOLO-Feature" "dark-mode" "$actual"
+
+actual="$(parse_trailer "$REPO_FIX" HEAD YOLO-Phase)"
+assert_eq "parse_trailer extracts YOLO-Phase" "do" "$actual"
+
+actual="$(parse_trailer "$REPO_FIX" HEAD Nonexistent-Trailer)"
+assert_eq "parse_trailer missing field returns empty" "" "$actual"
+
+# ── get_current_phase ──────────────────────────────────────────────
+actual="$(get_current_phase "$REPO_FIX")"
+assert_eq "get_current_phase returns latest trailer value" "do" "$actual"
+
+# Add a commit with a later phase
+echo "more" >> "$REPO_FIX/work.txt"
+git -C "$REPO_FIX" add work.txt
+git -C "$REPO_FIX" commit -q -m "[task-2] check phase work
+
+YOLO-Feature: dark-mode
+YOLO-Phase: check"
+
+actual="$(get_current_phase "$REPO_FIX")"
+assert_eq "get_current_phase returns most-recent phase after new commit" "check" "$actual"
+
+# Commit without trailer — phase stays at last seen
+echo "note" >> "$REPO_FIX/work.txt"
+git -C "$REPO_FIX" add work.txt
+git -C "$REPO_FIX" commit -q -m "misc tweak (no trailer)"
+
+actual="$(get_current_phase "$REPO_FIX")"
+assert_eq "get_current_phase ignores commits with no trailer" "check" "$actual"
+
+# ── is_path_in_scope ───────────────────────────────────────────────
+SCOPE_FEATURE="$TMPDIR_TEST/scope-feature.md"
+cat > "$SCOPE_FEATURE" <<'FEATUREEOF'
+---
+branch: feature/scope-test
+---
+
+## Plan
+1. [ ] Add greeter module
+  - files: src/greeter.ts, src/greeter.test.ts
+  - test: none
+
+2. [ ] Wire into app entry point
+  - files: src/app.ts
+  - test: pnpm test
+FEATUREEOF
+
+# In-scope paths
+if is_path_in_scope "$SCOPE_FEATURE" "src/greeter.ts"; then
+  assert_eq "in-scope: src/greeter.ts" "pass" "pass"
+else
+  assert_eq "in-scope: src/greeter.ts" "pass" "fail"
+fi
+
+if is_path_in_scope "$SCOPE_FEATURE" "src/app.ts"; then
+  assert_eq "in-scope: src/app.ts" "pass" "pass"
+else
+  assert_eq "in-scope: src/app.ts" "pass" "fail"
+fi
+
+# .planning/ always in scope
+if is_path_in_scope "$SCOPE_FEATURE" ".planning/features/foo/feature.md"; then
+  assert_eq "in-scope: .planning/ path" "pass" "pass"
+else
+  assert_eq "in-scope: .planning/ path" "pass" "fail"
+fi
+
+# Out-of-scope path
+if is_path_in_scope "$SCOPE_FEATURE" "src/unrelated.ts"; then
+  assert_eq "out-of-scope: src/unrelated.ts blocked" "pass" "fail"
+else
+  assert_eq "out-of-scope: src/unrelated.ts blocked" "pass" "pass"
+fi
+
+# Missing feature file — not in scope (unless .planning/)
+if is_path_in_scope "$TMPDIR_TEST/nonexistent.md" "src/app.ts"; then
+  assert_eq "no feature file + non-planning path → out-of-scope" "pass" "fail"
+else
+  assert_eq "no feature file + non-planning path → out-of-scope" "pass" "pass"
+fi
+
+if is_path_in_scope "" ".planning/anything.md"; then
+  assert_eq "no feature file + .planning/ path → in-scope" "pass" "pass"
+else
+  assert_eq "no feature file + .planning/ path → in-scope" "pass" "fail"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

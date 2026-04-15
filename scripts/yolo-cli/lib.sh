@@ -113,3 +113,117 @@ emit_json() {
   printf '{"committed":%s,"warnings":%s,"errors":%s}' \
     "$committed" "$warnings_json" "$errors_json"
 }
+
+# ── get_active_feature ─────────────────────────────────────────────
+# Print the active feature slug derived from the current git branch.
+# Convention: branch matching 'feature/<slug>' → prints '<slug>'.
+# Branches 'main', 'master', or anything else → empty output, exit 1.
+# Usage: get_active_feature [<repo_path>]
+get_active_feature() {
+  local repo="${1:-.}"
+  local branch
+  branch="$(git -C "$repo" symbolic-ref --short HEAD 2>/dev/null || true)"
+  if [[ -z "$branch" ]]; then
+    return 1
+  fi
+  if [[ "$branch" =~ ^feature/(.+)$ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+# ── parse_trailer ──────────────────────────────────────────────────
+# Extract a named trailer value from a commit message.
+# Usage: parse_trailer <repo_path> <commit_ref> <trailer_name>
+# Prints the value (everything after 'Name: ') or empty string if not present.
+parse_trailer() {
+  local repo="${1:-.}" ref="${2:-HEAD}" name="${3:-}"
+  if [[ -z "$name" ]]; then
+    printf ''
+    return 0
+  fi
+  local msg
+  msg="$(git -C "$repo" log -1 --format='%B' "$ref" 2>/dev/null || true)"
+  if [[ -z "$msg" ]]; then
+    printf ''
+    return 0
+  fi
+  # Use interpret-trailers --parse to get only the trailer block,
+  # then grep for the named trailer. Case-insensitive match per git convention.
+  local trailer_line
+  trailer_line="$(printf '%s\n' "$msg" | git interpret-trailers --parse 2>/dev/null | grep -i "^${name}:" | tail -1 || true)"
+  if [[ -z "$trailer_line" ]]; then
+    printf ''
+    return 0
+  fi
+  # Strip "Name: " prefix
+  printf '%s' "${trailer_line#*: }"
+}
+
+# ── get_current_phase ──────────────────────────────────────────────
+# Derive the current phase from the latest commit's YOLO-Phase trailer.
+# Usage: get_current_phase [<repo_path>] [<branch>]
+# Walks commits on the current branch (or specified branch) looking for the
+# most recent YOLO-Phase trailer. Empty if no trailer ever emitted.
+get_current_phase() {
+  local repo="${1:-.}" branch="${2:-HEAD}"
+  # Find the most recent commit whose message contains a YOLO-Phase trailer
+  local commit
+  commit="$(git -C "$repo" log -n 30 --format='%H' --grep='^YOLO-Phase:' "$branch" 2>/dev/null | head -1 || true)"
+  if [[ -z "$commit" ]]; then
+    printf ''
+    return 0
+  fi
+  parse_trailer "$repo" "$commit" "YOLO-Phase"
+}
+
+# ── is_path_in_scope ───────────────────────────────────────────────
+# Check whether a target path is in the active plan's declared file scope.
+# Usage: is_path_in_scope <feature_file> <target_path>
+# Returns 0 (true) if target is listed in any task's 'files:' annotation
+# OR the target lives under .planning/ (always in scope).
+# Returns 1 (false) otherwise.
+# Paths are normalized to workspace-relative; comparison is suffix-match
+# so absolute, relative, and './' variants all unify.
+is_path_in_scope() {
+  local feature_file="${1:-}" target="${2:-}"
+  if [[ -z "$target" ]]; then
+    return 1
+  fi
+  # .planning/ edits are always allowed (content layer, not code)
+  case "$target" in
+    */.planning/*|.planning/*|*/.planning|.planning) return 0 ;;
+  esac
+  if [[ -z "$feature_file" || ! -f "$feature_file" ]]; then
+    return 1
+  fi
+  # Normalize target to basename-ish form for suffix match
+  local t_norm="${target#./}"
+  # Parse plan section, collect every path listed after 'files:'
+  local in_plan=0 line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^##[[:space:]]+Plan ]]; then in_plan=1; continue; fi
+    if (( in_plan )) && [[ "$line" =~ ^##[[:space:]] ]]; then break; fi
+    if (( in_plan )); then
+      # Extract the value after 'files:' on the same line (header or sub-line)
+      if [[ "$line" == *files:* ]]; then
+        local rest="${line#*files:}"
+        # Split on commas
+        local IFS=',' entry
+        for entry in $rest; do
+          # Trim leading/trailing whitespace and stray punctuation
+          entry="${entry#"${entry%%[![:space:]]*}"}"
+          entry="${entry%"${entry##*[![:space:]]}"}"
+          entry="${entry%.}"
+          [[ -z "$entry" ]] && continue
+          # Exact, relative-prefix, or suffix match
+          if [[ "$t_norm" == "$entry" || "$t_norm" == */"$entry" || "$entry" == */"$t_norm" ]]; then
+            return 0
+          fi
+        done
+      fi
+    fi
+  done < "$feature_file"
+  return 1
+}
