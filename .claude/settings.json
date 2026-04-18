@@ -255,16 +255,6 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash scripts/yolo-cli/hook-post-write.sh",
-            "statusMessage": "Checking test file modifications..."
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {

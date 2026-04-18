@@ -35,6 +35,11 @@ if [[ -z "$TARGET" ]]; then
   exit 0
 fi
 
+# Allow writes to temp/device paths (consistent with hook-pre-bash.sh).
+case "$TARGET" in
+  /tmp/*|/var/tmp/*|/dev/*) exit 0 ;;
+esac
+
 # Determine the repo to check against. CLAUDE_PROJECT_DIR is the session root;
 # fall back to the current working directory.
 REPO="${CLAUDE_PROJECT_DIR:-$PWD}"
