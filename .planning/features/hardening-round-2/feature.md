@@ -42,5 +42,9 @@ lint_commands: ["bash -n scripts/yolo-cli/lib.sh", "bash -n scripts/yolo-cli/hoo
   - files: scripts/yolo-cli/hook-pre-bash.sh, scripts/yolo-cli/hook-post-bash.sh, scripts/yolo-cli/test-hook-post-bash.sh
   - test: bash scripts/yolo-cli/test-hook-post-bash.sh
 
+7. [ ] Restore the check and debug agents that were lost during the hook-post-bash incident — check.md recovered from the dangling stash (v2/agents/check.md), debug.md re-authored based on the debug workflow pattern and the existing yolo:debug command contract
+  - files: .claude/yolo/agents/check.md, .claude/yolo/agents/debug.md, .claude/commands/yolo/debug.md
+  - test: none (agent prompt files, no executable tests)
+
 ## Verification
 (Written by check step)
