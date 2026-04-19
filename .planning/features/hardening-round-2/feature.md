@@ -46,8 +46,8 @@ lint_commands: ["bash -n scripts/yolo-cli/lib.sh", "bash -n scripts/yolo-cli/hoo
   - files: .claude/yolo/agents/check.md, .claude/yolo/agents/debug.md, .claude/commands/yolo/debug.md
   - test: none (agent prompt files, no executable tests)
 
-8. [ ] Fix pre-existing test-validate-plan.sh assertion drift where the error message changed but test expectations were not updated, causing 2 of 22 tests to fail on the string "tasks without tests" which is no longer in the error output
-  - files: scripts/yolo-cli/test-validate-plan.sh
+8. [ ] Re-create verify-commit.sh (lost untracked file), fix test-validate-plan.sh assertion drift where the error message changed but test expectations were not updated, causing 2 of 22 tests to fail on the string "tasks without tests" which is no longer in the error output
+  - files: scripts/yolo-cli/test-validate-plan.sh, scripts/yolo-cli/verify-commit.sh, scripts/yolo-cli/test-verify-commit.sh
   - test: bash scripts/yolo-cli/test-validate-plan.sh
 
 ## Verification
