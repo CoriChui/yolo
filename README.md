@@ -1,38 +1,33 @@
 # YOLO — You Only Live Once
 
-A simplified development workflow framework for Claude Code.
+An autonomous, feature-aware workflow framework for Claude Code.
+
+## How It Works
+
+No action commands. Feature lifecycle is driven by:
+- **Git state** — branch `feature/<slug>` defines the active feature; commit trailers record phase
+- **Plan scope gates** — every Edit/Write/Bash is checked against the plan's declared file scope
+- **Shell script sensors** — test integrity, plan validation, commit verification, reconciliation
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/yolo:do [desc]` | Execute small ad-hoc tasks with tracking |
-| `/yolo:debug [issue]` | Systematic debugging with persistent state |
-| `/yolo:sync [action]` | Import issues from external trackers |
-| `/yolo:help` | Show available commands |
-
-## Installation
-
-1. Copy the `.claude/` directory to your project root
-2. Run `/yolo:init` to initialize the framework
+| `/yolo:status` | Show all features and their git-derived steps |
+| `/yolo:help` | List commands and explain the autonomous model |
 
 ## Quick Start
 
+1. Copy `.claude/` and `scripts/yolo-cli/` to your project
+2. Create `.planning/` directory: `mkdir -p .planning/features .planning/decisions`
+3. Describe what you want to build — Claude reads the branch and drives the loop
+
+See `docs/getting-started.md` for the full guide.
+
+## Shell Scripts (standalone)
+
 ```bash
-# Small task
-/yolo:do "fix login validation"
-
-# Debug an issue
-/yolo:debug "API returns 500"
-
-# Import from GitHub
-/yolo:sync setup github
-/yolo:sync pull --label=bug
+bash scripts/yolo-cli/validate-plan.sh plan.md         # Plan quality gates
+bash scripts/yolo-cli/commit.sh task 1 "msg" --stage    # Prefixed + trailered commits
+bash scripts/yolo-cli/reconcile.sh feature.md --apply   # Git-evidenced reconciliation
 ```
-
-## Features
-
-- **Atomic commits** — Each change is tracked and committed properly
-- **Persistent state** — Debug sessions survive `/clear`
-- **External sync** — Import from GitHub, GitLab, Linear, Jira
-- **Auto-mapping** — epic→release, feature→feature, bug→/do task
