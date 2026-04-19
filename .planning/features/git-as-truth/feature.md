@@ -41,31 +41,31 @@ is the direct inspiration.
 
 ## Plan
 
-1. [x] Add `get_active_feature`, `get_current_phase`, `parse_trailer`, and `is_path_in_scope` helpers to `lib.sh` so every downstream script derives state from git identically without duplicated parsing logic, plus scope lookup from the active feature file's `files:` annotations
+1. [ ] Add `get_active_feature`, `get_current_phase`, `parse_trailer`, and `is_path_in_scope` helpers to `lib.sh` so every downstream script derives state from git identically without duplicated parsing logic, plus scope lookup from the active feature file's `files:` annotations
   - files: scripts/yolo-cli/lib.sh, scripts/yolo-cli/test-lib.sh
   - test: bash scripts/yolo-cli/test-lib.sh
 
-2. [x] Modify `commit.sh` to append `YOLO-Feature: <slug>` and `YOLO-Phase: <phase>` trailers via `git interpret-trailers --if-exists replace` so re-runs and amends do not duplicate, derived from branch name and the reconcile-derived current step
+2. [ ] Modify `commit.sh` to append `YOLO-Feature: <slug>` and `YOLO-Phase: <phase>` trailers via `git interpret-trailers --if-exists replace` so re-runs and amends do not duplicate, derived from branch name and the reconcile-derived current step
   - files: scripts/yolo-cli/commit.sh, scripts/yolo-cli/test-commit.sh
   - test: bash scripts/yolo-cli/test-commit.sh
 
-3. [x] Create `scripts/yolo-cli/active-feature.sh` that prints the active slug and phase to stdout (or exits 1 if no feature active), used by hooks and status line, with pure git-state derivation and no `.planning/` reads beyond scope resolution
+3. [ ] Create `scripts/yolo-cli/active-feature.sh` that prints the active slug and phase to stdout (or exits 1 if no feature active), used by hooks and status line, with pure git-state derivation and no `.planning/` reads beyond scope resolution
   - files: scripts/yolo-cli/active-feature.sh, scripts/yolo-cli/test-active-feature.sh
   - test: bash scripts/yolo-cli/test-active-feature.sh
 
-4. [x] Create `scripts/yolo-cli/hook-pre-write.sh` as a new PreToolUse hook for Edit/Write/MultiEdit/NotebookEdit that blocks writes when no feature is active and the target lives outside `.planning/`, or when the target is not in the active plan's file scope
+4. [ ] Create `scripts/yolo-cli/hook-pre-write.sh` as a new PreToolUse hook for Edit/Write/MultiEdit/NotebookEdit that blocks writes when no feature is active and the target lives outside `.planning/`, or when the target is not in the active plan's file scope
   - files: scripts/yolo-cli/hook-pre-write.sh, scripts/yolo-cli/test-hook-pre-write.sh
   - test: bash scripts/yolo-cli/test-hook-pre-write.sh
 
-5. [x] Extend `hook-pre-bash.sh` to detect write-redirections (`sed -i`, `cat > file`, heredoc to file, `tee` to file, `cp`/`mv` of scoped paths, `git checkout -- path`, `git apply`) and apply the same active-feature scope gate so Bash cannot bypass the Edit/Write hook
+5. [ ] Extend `hook-pre-bash.sh` to detect write-redirections (`sed -i`, `cat > file`, heredoc to file, `tee` to file, `cp`/`mv` of scoped paths, `git checkout -- path`, `git apply`) and apply the same active-feature scope gate so Bash cannot bypass the Edit/Write hook
   - files: scripts/yolo-cli/hook-pre-bash.sh, scripts/yolo-cli/test-hook-pre-bash.sh
   - test: bash scripts/yolo-cli/test-hook-pre-bash.sh
 
-6. [x] Refactor `reconcile.sh` to be read-only by default, rename `--fix` to `--apply`, refuse to run during active rebase/bisect/merge (detected via `.git/` marker files), and make repeated read-only runs idempotent with no side effects
+6. [ ] Refactor `reconcile.sh` to be read-only by default, rename `--fix` to `--apply`, refuse to run during active rebase/bisect/merge (detected via `.git/` marker files), and make repeated read-only runs idempotent with no side effects
   - files: scripts/yolo-cli/reconcile.sh, scripts/yolo-cli/test-reconcile.sh
   - test: bash scripts/yolo-cli/test-reconcile.sh
 
-7. [x] Wire `.claude/settings.json` to mount `hook-pre-write.sh` under PreToolUse matcher `Edit|Write|MultiEdit|NotebookEdit`, and add a `statusLine` entry that invokes `active-feature.sh` so the active slug and phase are visible without running `/yolo:status`
+7. [ ] Wire `.claude/settings.json` to mount `hook-pre-write.sh` under PreToolUse matcher `Edit|Write|MultiEdit|NotebookEdit`, and add a `statusLine` entry that invokes `active-feature.sh` so the active slug and phase are visible without running `/yolo:status`
   - files: .claude/settings.json
   - test: none (configuration change — verified manually by running a Claude Code session and observing status line and gate behavior)
 
