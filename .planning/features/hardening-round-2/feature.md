@@ -50,5 +50,9 @@ lint_commands: ["bash -n scripts/yolo-cli/lib.sh", "bash -n scripts/yolo-cli/hoo
   - files: scripts/yolo-cli/test-validate-plan.sh, scripts/yolo-cli/verify-commit.sh, scripts/yolo-cli/test-verify-commit.sh
   - test: bash scripts/yolo-cli/test-validate-plan.sh
 
+9. [ ] Fix status.md glob to scan `features/*/feature.md` instead of `features/*.md`, wire entry point via SessionStart hook injection in settings.json, default YOLO_POST_BASH_REVERT=1, fix post-bash jq-missing to fail closed, add symlink resolution in is_path_in_scope, clean stale refs in scripts.md and agent headers, add /yolo:debug to help.md and README, add test-verify-commit.sh and git-config isolation to test-integration.sh
+  - files: .claude/commands/yolo/status.md, .claude/commands/yolo/help.md, .claude/settings.json, .claude/yolo/reference/scripts.md, .claude/yolo/agents/execute.md, .claude/yolo/agents/research.md, scripts/yolo-cli/hook-post-bash.sh, scripts/yolo-cli/lib.sh, scripts/yolo-cli/test-verify-commit.sh, scripts/yolo-cli/test-integration.sh, README.md
+  - test: bash scripts/yolo-cli/test-integration.sh && bash scripts/yolo-cli/test-hook-post-bash.sh && bash scripts/yolo-cli/test-lib.sh
+
 ## Verification
 (Written by check step)

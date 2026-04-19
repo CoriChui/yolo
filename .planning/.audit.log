@@ -56,3 +56,5 @@
 2026-04-15T19:20:13Z	block	pre-bash	cleanup-action-commands	)),	python3 -c "import jsonfor name, cmd in [('d1_in.json','echo x REDIR src/allowed.ts'.replace('REDIR','> ')),                  ('d1_out.json','echo x REDIR src/hijack.ts'.replace('REDIR','> ')),                  ('d1_escape.json','bash -c \"echo \\\\\"x\\\\\" REDIR src/hijack.ts\"'.replace('REDIR','> '))]:    open('/tmp/yolo_qa_abc/payloads/'+name,'w').write(json.dumps({'tool_name':'Bash','tool_input':{'command':cmd}}))    print(name, open('/tmp/yolo_qa_abc/payloads/'+name).read())"
 2026-04-19T16:51:11Z	block	pre-bash	hardening-round-2	.claude/yolo/agents/check.md	git show e00eee94a5da0907cb90fb4bdbf78d75602444a7:.claude/yolo/v2/agents/check.md 2>/dev/null > .claude/yolo/agents/check.md && echo "check.md restored from stash"
 2026-04-19T16:59:20Z	report	post-bash	hardening-round-2	.claude/yolo/workflows/status.md	
+2026-04-19T17:00:46Z	block	pre-write	hardening-round-2	/Users/konstantintsoy/Desktop/web/yolo/scripts/yolo-cli/test-validate-plan.sh	Edit
+2026-04-19T17:03:39Z	block	pre-write	hardening-round-2	/Users/konstantintsoy/Desktop/web/yolo/scripts/yolo-cli/verify-commit.sh	Write
