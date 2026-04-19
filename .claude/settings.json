@@ -231,13 +231,23 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/yolo-cli/node/hook-session-start.js"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/yolo-cli/hook-pre-bash.sh",
+            "command": "node scripts/yolo-cli/node/hook-pre-bash.js",
             "statusMessage": "Gating bash writes..."
           }
         ]
@@ -247,7 +257,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/yolo-cli/hook-pre-write.sh",
+            "command": "node scripts/yolo-cli/node/hook-pre-write.js",
             "statusMessage": "Checking edit against plan scope..."
           }
         ]
@@ -259,7 +269,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/yolo-cli/hook-post-bash.sh",
+            "command": "node scripts/yolo-cli/node/hook-post-bash.js",
             "statusMessage": "Verifying bash writes against plan scope..."
           }
         ]
@@ -268,6 +278,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash scripts/yolo-cli/active-feature.sh --format status"
+    "command": "node scripts/yolo-cli/node/active-feature.js --format status"
   }
 }
