@@ -209,6 +209,18 @@ rc=$?
 set -e
 assert_exit "escaped-quote redirect to in-scope allowed" "0" "$rc"
 
+# ── Feature-file tamper protection ────────────────────────────────
+echo "=== feature-file tamper blocked ==="
+rc=$(run_hook "rm .planning/features/auth/feature.md" "$REPO")
+assert_exit "rm feature.md blocked" "2" "$rc"
+
+rc=$(run_hook "mv .planning/features/auth/feature.md /tmp/stash" "$REPO")
+assert_exit "mv feature.md blocked" "2" "$rc"
+
+# Non-feature plan file allowed (only feature.md is guarded)
+rc=$(run_hook "rm .planning/decisions/note.md" "$REPO")
+assert_exit "rm decisions file allowed" "0" "$rc"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if (( FAIL > 0 )); then

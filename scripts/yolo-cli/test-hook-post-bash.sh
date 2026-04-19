@@ -198,6 +198,33 @@ set -e
 assert_exit "no active feature exits 0" "0" "$rc"
 rm -f "$REPO/anywhere.txt"
 
+# ── Missing feature file → fail closed ─────────────────────────────
+echo "=== missing feature file → fail closed ==="
+git -C "$REPO" checkout -q feature/auth 2>/dev/null
+rm -f "$SNAP_FILE"
+printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
+# Delete the feature file
+rm "$REPO/.planning/features/auth/feature.md"
+set +e
+printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
+  | CLAUDE_PROJECT_DIR="$REPO" "$POST_HOOK" >/dev/null 2>&1
+rc=$?
+set -e
+assert_exit "missing feature.md on feature branch blocks (exit 2)" "2" "$rc"
+# Restore for cleanup
+cat > "$REPO/.planning/features/auth/feature.md" <<'FEATURE'
+---
+branch: feature/auth
+---
+
+## Plan
+1. [ ] Add login module
+  - files: src/login.ts
+  - test: none
+FEATURE
+git -C "$REPO" add .planning && git -C "$REPO" commit -q -m "restore plan" 2>/dev/null
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if (( FAIL > 0 )); then

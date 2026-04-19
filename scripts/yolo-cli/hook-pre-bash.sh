@@ -51,6 +51,15 @@ for pattern in "${BLOCKED_PATTERNS[@]}"; do
   fi
 done
 
+# ── 1b. Feature-file tamper protection ─────────────────────────────────
+# Unconditional: block any command that removes/moves/truncates the active
+# feature file. This prevents an attacker from deleting their way past the
+# scope gate (feature-file deletion disarms both pre-write and post-bash).
+if printf '%s' "$COMMAND" | grep -qE '(rm|mv|unlink|shred|truncate|:>|:\ >)[[:space:]].*\.planning/features/[^/]+/feature\.md'; then
+  echo "Blocked: command tampers with a feature plan file. Ask the user to run this manually." >&2
+  exit 2
+fi
+
 # ── Snapshot working-tree state for the post-bash delta check ──────
 # The post-bash hook compares this snapshot against git status after the
 # command runs and acts only on the delta (changes produced by THIS

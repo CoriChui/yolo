@@ -43,7 +43,12 @@ fi
 
 FEATURE_FILE="$REPO/.planning/features/$SLUG/feature.md"
 if [[ ! -f "$FEATURE_FILE" ]]; then
-  exit 0
+  # Feature file missing on a feature branch = tamper or accidental delete.
+  # Fail CLOSED: the absence of the plan means we cannot verify scope, and
+  # allowing writes silently was the exact vulnerability this fixes.
+  echo "YOLO post-bash: feature file for '$SLUG' is missing — blocking. Restore it or switch to main." >&2
+  audit_log "$REPO" "block" "post-bash" "$SLUG" "feature.md missing" ""
+  exit 2
 fi
 
 if [[ "${YOLO_BYPASS:-0}" == "1" ]]; then
