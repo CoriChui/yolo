@@ -90,7 +90,7 @@ output=$("$VALIDATE_SH" "$TESTNONE_FILE" 2>&1)
 rc=$?
 set -e
 assert_exit_code ">50% test:none rejected" "1" "$rc"
-assert_contains "mentions untested count" "tasks without tests" "$output"
+assert_contains "mentions untested count" "test:none" "$output"
 
 # ── Test 3: Short description rejected (<20 words) ───────────────────
 echo "=== short description rejected ==="
@@ -246,7 +246,7 @@ output=$("$VALIDATE_SH" "$NOPARENS_FILE" 2>&1)
 rc=$?
 set -e
 assert_exit_code "test:none without parens also rejected" "1" "$rc"
-assert_contains "mentions untested count (no parens)" "tasks without tests" "$output"
+assert_contains "mentions untested count (no parens)" "test:none" "$output"
 
 # ── Test 9: --no-test-suite skips test:none gate ──────────────────
 echo "=== --no-test-suite skips test:none gate ==="
