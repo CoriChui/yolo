@@ -40,7 +40,7 @@ Throughout this document, these variables are used:
 
 ---
 
-## Starting a Feature (`/yolo:start "description"`)
+## Starting a Feature
 
 ### Step 1: Create Feature File
 
@@ -60,7 +60,7 @@ test_commands: ["{discovered test command, e.g. npm test}"]
 ```
 
 4. Create worktree: `git worktree add {worktree} -b {branch}`
-5. **Set focus:** `echo "{slug}" > .planning/.focus`
+5. **Set focus:** `## Focus is derived from branch name (feature/<slug>), not a file.`
 6. Confirm to user: "Created feature `{slug}` with worktree at `{worktree}`."
 7. **Load context (if `--context` provided):**
    - For each `--context <path>`:
@@ -230,7 +230,7 @@ Parse tasks from `## Plan` section of `{feature_file}`. Execute in dependency or
    - **(c) Create PR:** `gh pr create --head {branch} --title "{goal}" --body "{summary}"`
    - **(d) Keep branch:** leave as-is for manual handling
 5. Move feature file: `mv {feature_file} .planning/features/done/`
-6. **Clear focus:** `rm -f .planning/.focus`
+6. **Clear focus:** `## Focus clears when switching away from the feature branch.`
 7. Remove worktree (unless option d): `git worktree remove {worktree}`
 8. Confirm: "Feature `{slug}` shipped."
 
@@ -238,14 +238,14 @@ Parse tasks from `## Plan` section of `{feature_file}`. Execute in dependency or
 
 ## Resuming a Feature
 
-When user says "resume {name}" or `/yolo:start` with no description:
+When user says "resume {name}" or wants to continue work:
 
 0. **Find feature to resume:**
-   - If `.planning/.focus` exists, read slug from it: `slug=$(cat .planning/.focus)`
-   - If `.planning/.focus` is missing, scan `.planning/features/*.md` (exclude `done/`):
-     - If exactly one feature file: use it
+   - Derive slug from current branch: `slug=$(get_active_feature "$PWD")`
+   - If no active feature (not on `feature/<slug>` branch), scan `.planning/features/*/feature.md` (exclude `done/`):
+     - If exactly one: use it and suggest switching to its branch
      - If multiple: list them and ask user which to resume via AskUserQuestion
-     - If none: error "No features in progress. Start one with `/yolo:start \"description\"`"
+     - If none: "No features in progress. Describe what you want to build."
 1. Read `{feature_file}` — extract goal, branch, worktree path
 1b. **Reload context:** If `## Context Sources` section exists in feature file, re-read each listed path. If a path is inaccessible (deleted file, URL down), warn user: "Context source {path} is no longer accessible." If `## Research` section exists, use it as cached research (do not re-spawn agent).
 2. Verify worktree exists; recreate if missing: `git worktree add {worktree} {branch}`
@@ -271,7 +271,7 @@ When user says "resume {name}" or `/yolo:start` with no description:
 | "re-plan this" / "start over" | Reconcile, show completed tasks with keep/revert options. For each completed task: ask user to keep (still valid) or revert. Batch-confirm reverts, execute `git -C {worktree} revert <hash>` for each, then go to Step 3. |
 | "check this" / "verify" | Go to Step 5 (Check) |
 | "ship it" / "merge" | Go to Step 6 (Ship) |
-| "park this" / "stop" | Check `git status` in worktree; if uncommitted changes: `{cli}/commit.sh wip --repo {worktree} --stage`. Clear focus: `rm -f .planning/.focus`. Switch to main. |
+| "park this" / "stop" | Check `git status` in worktree; if uncommitted changes: `{cli}/commit.sh wip --repo {worktree} --stage`. Clear focus: `## Focus clears when switching away from the feature branch.`. Switch to main. |
 | "skip this task" | Mark current task skipped, continue to next |
 | "full check" | Force full check mode in Step 5 |
 | "status" | Run reconcile, show current step + task progress |

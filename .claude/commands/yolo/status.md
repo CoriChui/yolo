@@ -41,12 +41,12 @@ Arguments: $ARGUMENTS
    ```
 5. **If $ARGUMENTS contains "--apply":** re-run reconcile with `--apply` on all features with drift
 6. **Suggest next action** based on the active feature's step:
-   - `think` → "Run `/yolo:start` to continue planning"
-   - `plan` → "Plan exists but no tasks started — run `/yolo:start` to begin execution"
-   - `do` → "Run `/yolo:start` to resume executing remaining tasks"
-   - `do-fix` → "Verification failed — run `/yolo:start` to fix and re-check"
-   - `check` → "All tasks done — run `/yolo:start` to verify"
-   - `ship` → "Verified — run `/yolo:start` to ship"
+   - `think` → "Describe what you want to build — I'll continue planning"
+   - `plan` → "Plan exists but no tasks started — say 'let's start' and I'll begin execution"
+   - `do` → "Tell me to continue and I'll resume executing remaining tasks"
+   - `do-fix` → "Verification failed — tell me to fix and I'll address the issues"
+   - `check` → "All tasks done — tell me to verify and I'll run checks"
+   - `ship` → "Verified — tell me to ship and I'll merge"
    - `done` → "Feature is complete"
 
 </process>
