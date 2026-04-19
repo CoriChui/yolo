@@ -55,14 +55,23 @@ if [[ "${YOLO_BYPASS:-0}" == "1" ]]; then
   exit 0
 fi
 
-# ── Read pre-command snapshot ──────────────────────────────────────
-SNAP="/tmp/yolo-snap-${PPID:-$$}.txt"
-if [[ ! -f "$SNAP" ]]; then
-  # No snapshot → pre-bash hook didn't run or was skipped. Without a baseline
-  # we cannot distinguish this-command changes from pre-existing state. Skip
-  # to avoid false reverts — this is the lesson from [fix-3].
+# ── Read pre-command snapshot via pointer file ────────────────────
+# The pre-hook writes a unique mktemp-ed snapshot and stores its path in
+# a pointer keyed by PPID. We read the pointer, consume the snapshot,
+# then clean up both files. This is race-safe across parallel tool calls
+# (each pre-hook creates a distinct mktemp-ed file) and poison-resistant
+# (chmod 600 + mktemp-random suffix).
+SNAP_PTR="/tmp/yolo-snap-ptr-${PPID:-$$}"
+if [[ ! -f "$SNAP_PTR" ]]; then
   exit 0
 fi
+SNAP="$(cat "$SNAP_PTR" 2>/dev/null || true)"
+if [[ -z "$SNAP" || ! -f "$SNAP" ]]; then
+  rm -f "$SNAP_PTR" 2>/dev/null || true
+  exit 0
+fi
+# Clean up pointer + snapshot after reading (one-shot consumption).
+trap 'rm -f "$SNAP" "$SNAP_PTR" 2>/dev/null' EXIT
 
 # ── Compute current status and diff against snapshot ──────────────
 CURRENT_STATUS="$(git -C "$REPO" status --porcelain 2>/dev/null || true)"

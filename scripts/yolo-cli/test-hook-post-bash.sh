@@ -85,12 +85,12 @@ git -C "$REPO" add .planning src
 git -C "$REPO" commit -q -m "seed"
 git -C "$REPO" checkout -q -b feature/auth
 
-# The hook uses PPID of the hook subprocess as the snapshot key. When we
-# invoke via the test shell, PPID is our $$ (the test process).
+# The hook uses PPID to key the pointer file. When we invoke via the test
+# shell, the hook's PPID is our $$ (the test process).
 SNAP_PPID="$$"
-export SNAP_FILE="/tmp/yolo-snap-${SNAP_PPID}.txt"
-# Clean any stale snapshot
-rm -f "$SNAP_FILE"
+export SNAP_PTR="/tmp/yolo-snap-ptr-${SNAP_PPID}"
+# Clean any stale pointer/snapshot
+rm -f "$SNAP_PTR" /tmp/yolo-snap.* 2>/dev/null || true
 
 # Helper: run pre-hook to snapshot, then run the simulated command (via the
 # shell — not a Bash tool call), then run post-hook and capture its exit.
@@ -140,7 +140,7 @@ git -C "$REPO" checkout -q -- .
 
 # ── YOLO_POST_BASH_REVERT=1 performs the revert ───────────────────
 echo "=== opt-in revert via YOLO_POST_BASH_REVERT=1 ==="
-rm -f "$SNAP_FILE"
+rm -f "$SNAP_PTR" /tmp/yolo-snap.* 2>/dev/null || true
 # Pre-hook snapshot
 printf '{"tool_name":"Bash","tool_input":{"command":"echo x > f"}}' \
   | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
@@ -157,7 +157,7 @@ assert_file_content_eq "out-of-scope file reverted when opt-in" "$REPO/src/other
 
 # ── YOLO_BYPASS=1 skips everything ────────────────────────────────
 echo "=== YOLO_BYPASS=1 skips enforcement ==="
-rm -f "$SNAP_FILE"
+rm -f "$SNAP_PTR" /tmp/yolo-snap.* 2>/dev/null || true
 printf '{"tool_name":"Bash","tool_input":{"command":"echo x > f"}}' \
   | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
 echo "still-hijack" > "$REPO/src/other.ts"
@@ -172,7 +172,7 @@ git -C "$REPO" checkout -q -- .
 
 # ── No snapshot file → skip (fail-safe) ──────────────────────────
 echo "=== missing snapshot → skip (no revert) ==="
-rm -f "$SNAP_FILE"
+rm -f "$SNAP_PTR" /tmp/yolo-snap.* 2>/dev/null || true
 echo "hijack-no-snap" > "$REPO/src/other.ts"
 set +e
 printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
@@ -186,7 +186,7 @@ git -C "$REPO" checkout -q -- .
 # ── No active feature (on main) → skip ────────────────────────────
 echo "=== on main: no enforcement ==="
 git -C "$REPO" checkout -q main
-rm -f "$SNAP_FILE"
+rm -f "$SNAP_PTR" /tmp/yolo-snap.* 2>/dev/null || true
 printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
   | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
 echo "anything" > "$REPO/anywhere.txt"
@@ -201,7 +201,7 @@ rm -f "$REPO/anywhere.txt"
 # ── Missing feature file → fail closed ─────────────────────────────
 echo "=== missing feature file → fail closed ==="
 git -C "$REPO" checkout -q feature/auth 2>/dev/null
-rm -f "$SNAP_FILE"
+rm -f "$SNAP_PTR" /tmp/yolo-snap.* 2>/dev/null || true
 printf '{"tool_name":"Bash","tool_input":{"command":"cmd"}}' \
   | CLAUDE_PROJECT_DIR="$REPO" "$PRE_HOOK" >/dev/null 2>&1 || true
 # Delete the feature file

@@ -67,8 +67,17 @@ fi
 _snapshot_worktree() {
   local repo="${CLAUDE_PROJECT_DIR:-$PWD}"
   [[ -d "$repo/.git" || -f "$repo/.git" ]] || return 0
-  local snap="/tmp/yolo-snap-${PPID:-$$}.txt"
+  # Use mktemp for per-call uniqueness + chmod 600 so other users on
+  # shared machines cannot poison the snapshot. A pointer file keyed by
+  # PPID links the pre-hook snapshot to the post-hook (same parent pid).
+  local snap
+  snap="$(mktemp /tmp/yolo-snap.XXXXXX 2>/dev/null)" || return 0
+  chmod 600 "$snap" 2>/dev/null || true
   git -C "$repo" status --porcelain 2>/dev/null > "$snap" || true
+  # Write pointer for post-bash to find this specific snapshot
+  local ptr="/tmp/yolo-snap-ptr-${PPID:-$$}"
+  printf '%s\n' "$snap" > "$ptr" 2>/dev/null || true
+  chmod 600 "$ptr" 2>/dev/null || true
 }
 _snapshot_worktree
 
