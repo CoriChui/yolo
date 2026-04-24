@@ -29,7 +29,7 @@ Manage releases — the top-level work containers.
 </objective>
 
 <execution_context>
-Read `.claude/yolo/workflows/release.md` for the workflow. Read `.planning/state.yaml` first.
+Read `.claude/yolo/workflows/release.md` for the workflow. Read `workspace/state.yaml` first.
 </execution_context>
 
 <context>

@@ -1,7 +1,7 @@
 # Release Workflow
 # Commands: /yolo:release new, /yolo:release start, /yolo:release run, /yolo:release end, /yolo:release status
 
-Read `.planning/state.yaml` before any mutating operation. Validate it exists and is valid YAML — if missing, error: "Run `/yolo:init` first." For read-only commands (`/release status`), fall back to reading `release.yaml` files directly from `.planning/releases/` if state.yaml is unavailable.
+Read `workspace/state.yaml` before any mutating operation. Validate it exists and is valid YAML — if missing, error: "Run `/yolo:init` first." For read-only commands (`/release status`), fall back to reading `release.yaml` files directly from `workspace/releases/` if state.yaml is unavailable.
 **Rule:** Every state.yaml or release.yaml mutation must update `updated_at` to current ISO 8601 UTC timestamp.
 
 ---
@@ -18,7 +18,7 @@ Create a pending release with initial intake.
 
 3. **Create structure:**
    ```
-   .planning/releases/{id}/
+   workspace/releases/{id}/
    ├── release.yaml
    ├── intake/{slug}-v1/
    │   └── manifest.yaml
@@ -58,9 +58,9 @@ Create a pending release with initial intake.
      sources: 0
    ```
 
-6. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. **Recovery check (forward):** scan `.planning/releases/` for directories not listed in `releases[]` — if found, validate that the directory contains a parseable `release.yaml` with required fields (`id`, `status`, `slug`). If valid, **validate slug-vs-directory consistency:** verify that the `id` and `slug` fields in `release.yaml` match the directory name (directory should be named `{id}` which contains the slug). If mismatch, warn: "Release directory name '{dirname}' does not match release.yaml id '{id}' or slug '{slug}'. Fix manually." Also check for expected subdirectories (`intake/`, `features/`) — if missing, warn: "Release directory {id} is missing subdirectories (intake/ or features/). It may be partially created. Repair (create missing dirs) or remove?" via AskUserQuestion. If subdirectories exist, warn: "Found release directory {id} not tracked in state.yaml. This may be from a crashed `/release new`. Add to state? (yes/no)" via AskUserQuestion. If invalid (missing or corrupt `release.yaml`), warn: "Found release directory {id} with no valid release.yaml — remove manually or reinitialize." **Recovery check (reverse):** for each entry in `releases[]`, verify the corresponding directory exists at `.planning/releases/{id}/`. If a directory is missing, warn: "Release {id} is tracked in state.yaml but its directory no longer exists. Remove orphaned entry? (yes/no)" via AskUserQuestion. If approved, remove the entry from `releases[]`. Read current `focus.release` — if another release is already focused, warn user and confirm before switching. If `session.run_active` is `true`, warn: "A release run is in progress on the currently focused release. Switching focus will disrupt the run. Continue?" via AskUserQuestion. **Check for duplicate release IDs:** verify `releases[]` does not already contain an entry with this release's ID before adding. If duplicate found, update the existing entry instead of adding a new one. Then add to `releases[]` with full field list: `id`, `slug`, `status: pending`, `intake: { current: "{slug}-v1", locked: false }`, `progress: { features_total: 0, features_completed: 0, percentage: 0 }`. Set `focus.release`. **Clear `focus.feature` with logging:** If `focus.feature` is currently set, log: "Clearing focus.feature (was: {focus.feature}) — switching to new release." Set `focus.feature: null`. Update `updated_at`, `session.last_action` and `session.resume`.
+6. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. **Recovery check (forward):** scan `workspace/releases/` for directories not listed in `releases[]` — if found, validate that the directory contains a parseable `release.yaml` with required fields (`id`, `status`, `slug`). If valid, **validate slug-vs-directory consistency:** verify that the `id` and `slug` fields in `release.yaml` match the directory name (directory should be named `{id}` which contains the slug). If mismatch, warn: "Release directory name '{dirname}' does not match release.yaml id '{id}' or slug '{slug}'. Fix manually." Also check for expected subdirectories (`intake/`, `features/`) — if missing, warn: "Release directory {id} is missing subdirectories (intake/ or features/). It may be partially created. Repair (create missing dirs) or remove?" via AskUserQuestion. If subdirectories exist, warn: "Found release directory {id} not tracked in state.yaml. This may be from a crashed `/release new`. Add to state? (yes/no)" via AskUserQuestion. If invalid (missing or corrupt `release.yaml`), warn: "Found release directory {id} with no valid release.yaml — remove manually or reinitialize." **Recovery check (reverse):** for each entry in `releases[]`, verify the corresponding directory exists at `workspace/releases/{id}/`. If a directory is missing, warn: "Release {id} is tracked in state.yaml but its directory no longer exists. Remove orphaned entry? (yes/no)" via AskUserQuestion. If approved, remove the entry from `releases[]`. Read current `focus.release` — if another release is already focused, warn user and confirm before switching. If `session.run_active` is `true`, warn: "A release run is in progress on the currently focused release. Switching focus will disrupt the run. Continue?" via AskUserQuestion. **Check for duplicate release IDs:** verify `releases[]` does not already contain an entry with this release's ID before adding. If duplicate found, update the existing entry instead of adding a new one. Then add to `releases[]` with full field list: `id`, `slug`, `status: pending`, `intake: { current: "{slug}-v1", locked: false }`, `progress: { features_total: 0, features_completed: 0, percentage: 0 }`. Set `focus.release`. **Clear `focus.feature` with logging:** If `focus.feature` is currently set, log: "Clearing focus.feature (was: {focus.feature}) — switching to new release." Set `focus.feature: null`. Update `updated_at`, `session.last_action` and `session.resume`.
 
-7. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: create release {id}"`.
+7. **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: create release {id}"`.
 
 8. **Report** with next steps: `/yolo:intake capture`, `/yolo:release start`.
 
@@ -84,7 +84,7 @@ Activate a pending release: research codebase, define goal, create features.
    Input:
    - goal: "Understand codebase architecture for release {id}"
    - scope: project source directories
-   - intake: path to intake directory (e.g., `.planning/releases/{id}/intake/{version}/`)
+   - intake: path to intake directory (e.g., `workspace/releases/{id}/intake/{version}/`)
    - release_context: release ID and goal
    - If `--prompt`: inject as high-priority constraint
 
@@ -148,7 +148,7 @@ Activate a pending release: research codebase, define goal, create features.
 
 14. **Update state.yaml:** Re-read `state.yaml` to get current values. **Verify `releases[]` entry exists** for this release ID — if missing (e.g., removed by concurrent `/release new` recovery), re-add it with full field list before updating. Set release `status: active`, update progress to `{ features_total: {count from step 11}, features_completed: 0, percentage: 0 }`, update `updated_at`, `session.last_action` and `session.resume`.
 
-15. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: start release {id} — {feature_count} features created"`.
+15. **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: start release {id} — {feature_count} features created"`.
 
 16. **Report** with next steps: `/yolo:feature start 01`.
 
@@ -165,7 +165,7 @@ Run all pending features sequentially through the full pipeline (`/yolo:feature 
 2. **If `--from <id>`:** Note starting point.
 
 3. **Mark run active:** Re-read `state.yaml` to get current values. Update `state.yaml`: set `session.run_active: true`, `session.run_started_at: {timestamp}`, `session.last_action: "Starting release run"`, `updated_at`. **Reset failure counters (new run only):** If `--from` is NOT specified, reset `run_failure_count` to 0 in each feature's `feature.yaml` for this release **only for features with `status != completed`** (skip completed features to avoid unnecessary writes and `updated_at` churn on stable files).
-   **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: start release run {id}"`.
+   **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: start release run {id}"`.
 
 4. **Feature loop** (re-evaluate after each completion):
 
@@ -191,7 +191,7 @@ Run all pending features sequentially through the full pipeline (`/yolo:feature 
 
 5. **Clear run state:** Re-read `state.yaml` to get current values before writing. Update `state.yaml`: set `session.run_active: false`, `session.run_started_at: null`, `session.last_action: "Release run completed"`, `session.resume: "All features processed. Run /yolo:release end to complete the release."`, `updated_at`.
 
-   **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: complete release run {id}"`.
+   **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: complete release run {id}"`.
 
 6. **On all features complete:** Report summary. If failed features remain, list them with suggested actions (`/yolo:feature start {id}` to retry). If all features completed, suggest `/yolo:release end`.
 
@@ -224,7 +224,7 @@ Complete an active release.
 
 6. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set release status to `completed` and `releases[].intake.locked: true` in `releases[]`. **Reconcile progress:** re-read `release.yaml` `features.total`, count completed features, update `releases[].progress.features_total`, `features_completed`, and recompute `percentage` as `features_total > 0 ? (features_completed / features_total) * 100 : 0`. **If `session.run_active` is `true`:** clear `session.run_active: false` and `session.run_started_at: null` only if `focus.release` matches this release's ID or if `session.run_started_at` is older than 2 hours (stale run from a different release). If another release owns the active run and it is recent, leave `session.run_active` unchanged and log: "Preserving run_active — owned by a different release." **Note:** `session.run_active` is global (not per-release) — care must be taken when ending one release while another has an active run. Read current `focus.release` — only clear focus if it matches this release's ID (no-op if null or different release). If clearing `focus.release`, check if `focus.feature` belongs to this release (read feature.yaml to verify `release` field matches). Only clear `focus.feature` if it does. Update `updated_at`, `session.last_action: "Release {id} completed"` and `session.resume: "Release {id} completed. Create a new release with /yolo:release new <slug>."`.
 
-7. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: complete release {id}"`.
+7. **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: complete release {id}"`.
 
 8. **Report** with summary and next steps.
 
@@ -257,7 +257,7 @@ RELEASES
 
 - Release IDs: `YYYY-MM-DD-slug`
 - Intake version format: `{slug}-v{N}`
-- Intake is release-scoped at `.planning/releases/{id}/intake/`
+- Intake is release-scoped at `workspace/releases/{id}/intake/`
 - Codebase is source of truth; intake is auxiliary context
 - Features are vertical slices, not horizontal layers
 - Release-level research saved to release dir — per-feature planning reuses it. Feature-level research (when release research doesn't cover the feature) is persisted to `features/{id}/research.md`

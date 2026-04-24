@@ -25,5 +25,5 @@ Arguments: $ARGUMENTS
 </context>
 
 <process>
-Read `.planning/state.yaml` and follow `.claude/yolo/workflows/status.md`.
+Read `workspace/state.yaml` and follow `.claude/yolo/workflows/status.md`.
 </process>

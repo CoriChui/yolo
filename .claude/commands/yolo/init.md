@@ -13,7 +13,7 @@ allowed-tools:
 ---
 
 <objective>
-Initialize YOLO framework in the current project. Creates `.planning/` structure and initial state.
+Initialize YOLO framework in the current project. Creates `workspace/` structure and initial state.
 </objective>
 
 <execution_context>

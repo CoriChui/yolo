@@ -1,7 +1,7 @@
 # Feature Workflow
 # Commands: /yolo:feature add, /yolo:feature start, /yolo:feature plan, /yolo:feature verify, /yolo:feature complete, /yolo:feature status
 
-Read `.planning/state.yaml` before any mutating operation. Validate it exists and is valid YAML — if missing, error: "Run `/yolo:init` first." For read-only commands (`/feature status`), fall back to reading `feature.yaml` directly if state.yaml is unavailable.
+Read `workspace/state.yaml` before any mutating operation. Validate it exists and is valid YAML — if missing, error: "Run `/yolo:init` first." For read-only commands (`/feature status`), fall back to reading `feature.yaml` directly if state.yaml is unavailable.
 **Rule:** Every state.yaml or feature.yaml mutation must update `updated_at` to current ISO 8601 UTC timestamp.
 **Rule:** Workflows are single-threaded — only one workflow operates on a feature at a time. Multi-session concurrent operation on the same feature is explicitly unsupported and may cause state corruption.
 
@@ -79,7 +79,7 @@ Follow `/feature plan` process below. Skip if plan.md already exists — in that
 
 6. **Lead monitors:** Wait for task completions, handle failures. Lead never implements — only coordinates. Lead handles all git operations (execute agents do not run git commands). After each task completion: re-read `feature.yaml` and `state.yaml` to get current values, **verify feature status is still `in_progress`** (if changed, abort with error: "Feature status changed unexpectedly to {status}. Restart with `/yolo:feature start <id>`."), then update `feature.yaml`: **track completed task IDs** in `tasks.completed_ids` array (append the completed task's ID); **guard against duplicates:** if the task ID is already in `tasks.completed_ids`, log warning: "Duplicate task completion detected for {task_id}" and do not increment; otherwise increment `tasks.completed += 1` (cap at `tasks.total`). Update `tasks.current`. Update `state.yaml` (`updated_at`, `session.last_action`, `session.resume`). **Task lock:** Before spawning each teammate, write a lock file at `{worktree_dir}/.task-locks/{task_id}` to mark the task as assigned. After confirming task completion and updating `tasks.completed_ids`, delete the lock file. Then commit changes in the worktree with `--no-verify` (use the agent's `commit_message` from its output YAML).
 
-   > **Note:** `.planning/` is tracked in git and exists in both main tree and worktree. The lead operates from the main tree; state/feature YAML changes are made in the main tree and committed there with `--no-verify` (metadata-only commits — Phase 4 hook gate validates the full codebase later). Worktree commits contain only code changes. **Dual-commit ordering:** (1) write task lock in worktree, (2) commit code changes in worktree with `--no-verify`, (3) update `feature.yaml`/`state.yaml` in main tree, (4) commit metadata in main tree with `--no-verify`, (5) delete task lock. If step 3 or 4 fails, the lock file persists — crash recovery in step 4 of Phase 3 detects this via `.task-locks/` and reconciles by checking worktree for code changes.
+   > **Note:** `workspace/` is tracked in git and exists in both main tree and worktree. The lead operates from the main tree; state/feature YAML changes are made in the main tree and committed there with `--no-verify` (metadata-only commits — Phase 4 hook gate validates the full codebase later). Worktree commits contain only code changes. **Dual-commit ordering:** (1) write task lock in worktree, (2) commit code changes in worktree with `--no-verify`, (3) update `feature.yaml`/`state.yaml` in main tree, (4) commit metadata in main tree with `--no-verify`, (5) delete task lock. If step 3 or 4 fails, the lock file persists — crash recovery in step 4 of Phase 3 detects this via `.task-locks/` and reconciles by checking worktree for code changes.
 
 7. **Shutdown teammates** when all tasks done.
 
@@ -109,7 +109,7 @@ Follow `/feature plan` process below. Skip if plan.md already exists — in that
 6. **If agent fails** (could not resolve) →
    Update feature.yaml: Set `status: hook_gate_failed`, `updated_at`. **Set `previous_failure` with history preservation:** if `previous_failure` was `verify_failed`, keep `previous_failure: verify_failed` to retain the original failure context; otherwise set `previous_failure: hook_gate_failed`.
    **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `session.last_action: "Hook gate failed"`, `session.resume: "Hook gate failed for feature {id}. Fix issues in worktree at {worktree_dir}, then re-run: /yolo:feature start <id>"`, `updated_at`. **Reconcile `releases[].progress`:** read release.yaml and count actual completed features to refresh the cached progress in state.yaml.
-   **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: hook gate failed for feature {id}"`.
+   **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: hook gate failed for feature {id}"`.
    Report failure prominently:
    ```
    ⛔ PIPELINE FAILED
@@ -138,7 +138,7 @@ Follow `/feature plan` process below. Skip if plan.md already exists — in that
    **Persist `rule_results`** (if provided by the verify agent) to verification.md alongside `results` and `issues`. **Exclude `type_check_results`** from verification.md output — this field is agent-internal and must not be persisted.
 
 3. **If passed:** Proceed to Phase 6.
-4. **If failed:** Update feature.yaml: Set `status: verify_failed`, `previous_failure: verify_failed`, `updated_at`. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `session.last_action: "Verification failed with blockers"`, `session.resume: "Verification failed for feature {id}. Fix failing criteria, then re-run: /yolo:feature start <id>"`, `updated_at`. **Reconcile `releases[].progress`:** read release.yaml and count actual completed features to refresh the cached progress in state.yaml. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: verify failed for feature {id}"`. Write `verification.md` with results (excluding `type_check_results`). Report failure prominently:
+4. **If failed:** Update feature.yaml: Set `status: verify_failed`, `previous_failure: verify_failed`, `updated_at`. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `session.last_action: "Verification failed with blockers"`, `session.resume: "Verification failed for feature {id}. Fix failing criteria, then re-run: /yolo:feature start <id>"`, `updated_at`. **Reconcile `releases[].progress`:** read release.yaml and count actual completed features to refresh the cached progress in state.yaml. **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: verify failed for feature {id}"`. Write `verification.md` with results (excluding `type_check_results`). Report failure prominently:
    ```
    ⛔ PIPELINE FAILED
    Feature {id}: {name}
@@ -182,7 +182,7 @@ Add a new feature to the active release. Creates a `feature.yaml` with the same 
    - `success_criteria`: at least 1 item, no empty strings.
    - `depends_on`: all referenced features exist in `features.list`. No circular dependencies introduced.
 
-6. **Create feature directory:** `.planning/releases/{release-id}/features/{id}-{name}/`
+6. **Create feature directory:** `workspace/releases/{release-id}/features/{id}-{name}/`
 
 7. **Write `feature.yaml`** with the full schema:
    ```yaml
@@ -228,7 +228,7 @@ Add a new feature to the active release. Creates a `feature.yaml` with the same 
 
 9. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. **Reconcile progress:** re-read `release.yaml` and count actual completed features from `features.list` (read each feature's `feature.yaml` status) to get `features_completed`. Update `releases[].progress.features_total` to match `release.yaml` `features.total`, set `releases[].progress.features_completed` to the reconciled count. Recompute `releases[].progress.percentage` as `features_total > 0 ? (features_completed / features_total) * 100 : 0`. Update `updated_at`, `session.last_action: "Added feature {id}-{name}"`, `session.resume: "New feature added. Start with /yolo:feature start {id}-{name}"`.
 
-10. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: add feature {id}-{name} to release {release-id}"`.
+10. **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: add feature {id}-{name} to release {release-id}"`.
 
 11. **Report** the created feature:
     ```
@@ -288,11 +288,11 @@ Create plan.md for the current feature.
 
 8. **Present for review:** User approves or rejects.
    - Approved → **Create worktree** if not already created (standalone `/feature plan` without prior `/feature start`): follow the worktree creation steps from Phase 1 step 5 — specifically: compute `WORKTREE_DIR` and `BRANCH_POINT`, run `git worktree add`, and **write `branch_point: "{BRANCH_POINT}"` to feature.yaml** (critical for Phase 5 diff accuracy). **Important:** Worktree creation MUST succeed before writing `status: in_progress`. If worktree creation fails, leave status unchanged and error. **TOCTOU guard:** Re-read `feature.yaml` to confirm status is still `planning` — if status has changed, error: "Feature status changed during plan approval. Another session may have modified this feature." Update feature.yaml: Set `status: in_progress`, `updated_at: {timestamp}`, update task count. If `started_at` is null, also set `started_at: {timestamp}`. **Note:** The `researching` status is not set by standalone `/feature plan` — it is only set when `/feature start` runs the full pipeline. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `focus.feature: {feature_id}`, `updated_at`, `session.last_action: "Plan approved"`, `session.resume`. **Crash recovery note:** If a crash occurs between the feature.yaml write (`status: in_progress`) and this state.yaml write (`focus.feature`), the feature will be `in_progress` but unfocused. `/yolo:status` reconciliation detects this — the feature's `in_progress` status is preserved and the user can re-focus via `/yolo:feature start <id>`.
-   **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: plan feature {feature_id}"`.
+   **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: plan feature {feature_id}"`.
    - Rejected → Update feature.yaml: Set `status: pending`, `started_at: null`, `updated_at: {timestamp}`, `research_skipped: false`, `previous_failure: null`, `research_retry_count: 0`, `verify_retry_count: 0`, `lint_commands: []`, `test_commands: []`, reset `tasks.total` and `tasks.completed` to 0, reset `completed_ids` to `[]`, set `tasks.current: null`. Delete plan.md, delete `features/{id}/research.md` if it exists (ensure clean slate on restart). **Clean up worktree and branch** if they exist (created in Phase 1 step 5, if applicable):
 1. Run `git worktree remove "{worktree_dir}" --force`. If this fails, warn user: "Worktree cleanup failed at {worktree_dir}. Manual cleanup required: `git worktree remove {worktree_dir} --force`." via AskUserQuestion — user must acknowledge before proceeding.
 2. Run `git branch -d "feature/{feature_id}"`. If this fails (branch may not exist if worktree creation failed), ignore — branch deletion failure is non-critical when worktree is already removed. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Set `focus.feature: null`, `updated_at`, `session.last_action: "Plan rejected"`, `session.resume`. Feature can be re-planned via `/yolo:feature plan` or restarted via `/yolo:feature start`. Note: `/feature start` will re-validate `depends_on` upon restart.
-   **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: reject plan for feature {feature_id}"`.
+   **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: reject plan for feature {feature_id}"`.
 
 ---
 
@@ -374,7 +374,7 @@ Mark feature as completed, merge worktree.
 
 6. **Update state.yaml:** Re-read `state.yaml` to get current values. Set `updated_at: {timestamp}`, clear `focus.feature`, **Note:** `/release run` only checks `focus.release` (not `focus.feature`) between feature executions — the null `focus.feature` window after clearing is expected and harmless. update `releases[].progress`: set `features_completed` to the reconciled count from step 5, set `features_total` from `release.yaml` `features.total`, recompute `percentage` as `features_total > 0 ? (features_completed / features_total) * 100 : 0`. Update `session.last_action` and `session.resume`.
 
-7. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: complete feature {feature_id}"`.
+7. **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: complete feature {feature_id}"`.
 
 8. **Determine next:** Show next pending feature or release completion status.
 

@@ -67,7 +67,7 @@ All intake requirements and gaps must be covered.
 ## Constraints
 
 - **Read-only** — read files for context, never modify
-- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any .planning/ files
+- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any workspace/ files
 - Feature IDs: two-digit sequential ("01", "02", ...)
 - Feature names: descriptive kebab-case slugs
 - `depends_on` format: `"{id}-{name}"` (e.g., `"01-foundation"`) — must match the dependency's `id` + `name` fields joined by hyphen

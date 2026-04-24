@@ -62,7 +62,7 @@ When working as part of a multi-agent team (spawned via TeamCreate):
 
 - **Single task focus** — complete exactly the task given, no extras
 - **File scope** — prefer modifying files listed in task.files; closely related files (e.g., shared imports, co-located tests) may be touched if necessary for a cohesive change
-- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any .planning/ files (reading CLAUDE.md files for domain context is allowed)
+- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any workspace/ files (reading CLAUDE.md files for domain context is allowed)
 - **No git operations** — do NOT run git add, git commit, etc. Provide commit_message in output; the workflow handles git. **Exception:** When spawned as a solo agent for Phase 4 hook gate fixes, git commit is permitted (the workflow explicitly instructs you to commit).
 - **No over-engineering** — simple, direct solutions only
 - **No scope creep** — don't refactor, optimize, or "improve" unrelated code

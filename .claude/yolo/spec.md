@@ -15,7 +15,7 @@ Codebase (truth)  +  Intake (auxiliary)  →  Release  →  Features  →  Outpu
 ## File Structure
 
 ```
-.planning/
+workspace/
 ├── config.yaml                           # Settings
 ├── state.yaml                            # Project state
 ├── decisions/                            # Design decisions from /decide
@@ -343,11 +343,11 @@ conflicts:
 
 ### Concurrency
 
-The intake workflow uses an advisory lock file `.planning/releases/{id}/intake/.capture-in-progress` (containing timestamp and source name) to detect concurrent captures. Created at capture start, checked for staleness (> 30 min = likely crash), and cleaned up after completion.
+The intake workflow uses an advisory lock file `workspace/releases/{id}/intake/.capture-in-progress` (containing timestamp and source name) to detect concurrent captures. Created at capture start, checked for staleness (> 30 min = likely crash), and cleaned up after completion.
 
 ## State Management
 
-`state.yaml` is the project state index — it provides quick-lookup session and release data. Read first in every workflow and command that accesses `.planning/` state (except init, which creates it). For **mutating** operations, state.yaml is required — error if missing. For **read-only** commands (`/feature status`, `/release status`), fall back to reading authoritative YAML files directly if state.yaml is unavailable. `/status` performs crash-recovery reconciliation (writes corrections to state.yaml) but falls back to read-only mode if state.yaml is missing.
+`state.yaml` is the project state index — it provides quick-lookup session and release data. Read first in every workflow and command that accesses `workspace/` state (except init, which creates it). For **mutating** operations, state.yaml is required — error if missing. For **read-only** commands (`/feature status`, `/release status`), fall back to reading authoritative YAML files directly if state.yaml is unavailable. `/status` performs crash-recovery reconciliation (writes corrections to state.yaml) but falls back to read-only mode if state.yaml is missing.
 
 ```yaml
 updated_at: 2026-02-10T14:30:00Z
@@ -381,7 +381,7 @@ session:
 
 ### Agent Access Rules
 
-Agents are **stateless** — they MUST NOT read or write `state.yaml`, `feature.yaml`, `plan.md`, or any `.planning/` files directly. Workflows pass relevant state as agent input and update state after agents return. This is enforced by convention via agent prompts (agents declare "No state access" constraints), not by technical file-access restrictions. Exception: reading `CLAUDE.md` files for domain context is allowed (these are project instructions, not workflow state).
+Agents are **stateless** — they MUST NOT read or write `state.yaml`, `feature.yaml`, `plan.md`, or any `workspace/` files directly. Workflows pass relevant state as agent input and update state after agents return. This is enforced by convention via agent prompts (agents declare "No state access" constraints), not by technical file-access restrictions. Exception: reading `CLAUDE.md` files for domain context is allowed (these are project instructions, not workflow state).
 
 ### Research Output Fields
 
@@ -538,14 +538,14 @@ The `/yolo:release run` workflow uses the `Skill` tool to invoke `/yolo:feature 
 
 | Command | Description |
 |---------|-------------|
-| `/yolo:init` | Initialize YOLO in current project (creates `.planning/` with `state.yaml`, `config.yaml`, `decisions/`, `releases/`) |
+| `/yolo:init` | Initialize YOLO in current project (creates `workspace/` with `state.yaml`, `config.yaml`, `decisions/`, `releases/`) |
 | `/yolo:status` | Overall project status |
-| `/yolo:decide` | Design decision via multi-perspective debate (saves to `.planning/decisions/{slug}.md`; updates `session.last_action`, `session.resume`, `updated_at`) |
+| `/yolo:decide` | Design decision via multi-perspective debate (saves to `workspace/decisions/{slug}.md`; updates `session.last_action`, `session.resume`, `updated_at`) |
 | `/yolo:help` | Show available commands |
 
 ## Configuration
 
-`.planning/config.yaml`:
+`workspace/config.yaml`:
 
 ```yaml
 project:

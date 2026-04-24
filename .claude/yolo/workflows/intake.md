@@ -2,7 +2,7 @@
 # Commands: /yolo:intake capture, /yolo:intake add, /yolo:intake list, /yolo:intake status
 
 Intake is **optional auxiliary context** — release-scoped, stored as `.md` digest files.
-Read `.planning/state.yaml` before any operation. Validate it exists and is valid YAML — if missing, error: "Run `/yolo:init` first."
+Read `workspace/state.yaml` before any operation. Validate it exists and is valid YAML — if missing, error: "Run `/yolo:init` first."
 **Rule:** Every state.yaml, release.yaml, or manifest.yaml mutation must update `updated_at` to current ISO 8601 UTC timestamp.
 **Rule:** Intake workflows are single-threaded — only one `/intake capture` or `/intake add` operation at a time. Do not run concurrent intake operations on the same release.
 
@@ -36,7 +36,7 @@ Capture from an external source into the focused release's intake.
 
 ### Process
 
-1. **Resolve release:** Use `--release` flag or `focus.release`. Must be pending or active (not completed) AND `intake.locked` must be `false`. **Note (TOCTOU):** The `intake.locked` check here and the re-validation in step 11 form a best-effort safety net, not a true lock — the single-threaded rule (see header) is the primary guard against concurrent modification. File writes in steps 5-9 are not protected by a lock between the initial check and the re-validation. **Advisory lock:** Check for existing `.planning/releases/{id}/intake/.capture-in-progress` file — if present and recent (< 30 min), warn user: "A prior intake capture may still be in progress (started at {timestamp} for source {source}). It may have crashed. Override and continue?" via AskUserQuestion. **Crash recovery:** If the lock file exists (stale or acknowledged by user), also check if the source directory from the previous capture exists (`intake/{version}/{source}/`). If found, offer cleanup: "Found orphaned source directory from a prior crashed capture: {source}. Clean up (delete directory and restore conflicts.yaml if modified)?" via AskUserQuestion. If approved, delete the orphaned source directory and revert any `conflicts.yaml` additions from the crashed capture. If the lock file is older than 30 min, treat as stale from a crash and proceed. Then write a temporary file `.planning/releases/{id}/intake/.capture-in-progress` at this step (containing timestamp and source name). `/release end` should check for this file before locking intake — if present and recent (< 30 min), warn: "An intake capture may be in progress. Continue?" Remove the advisory lock in step 14 after completion.
+1. **Resolve release:** Use `--release` flag or `focus.release`. Must be pending or active (not completed) AND `intake.locked` must be `false`. **Note (TOCTOU):** The `intake.locked` check here and the re-validation in step 11 form a best-effort safety net, not a true lock — the single-threaded rule (see header) is the primary guard against concurrent modification. File writes in steps 5-9 are not protected by a lock between the initial check and the re-validation. **Advisory lock:** Check for existing `workspace/releases/{id}/intake/.capture-in-progress` file — if present and recent (< 30 min), warn user: "A prior intake capture may still be in progress (started at {timestamp} for source {source}). It may have crashed. Override and continue?" via AskUserQuestion. **Crash recovery:** If the lock file exists (stale or acknowledged by user), also check if the source directory from the previous capture exists (`intake/{version}/{source}/`). If found, offer cleanup: "Found orphaned source directory from a prior crashed capture: {source}. Clean up (delete directory and restore conflicts.yaml if modified)?" via AskUserQuestion. If approved, delete the orphaned source directory and revert any `conflicts.yaml` additions from the crashed capture. If the lock file is older than 30 min, treat as stale from a crash and proceed. Then write a temporary file `workspace/releases/{id}/intake/.capture-in-progress` at this step (containing timestamp and source name). `/release end` should check for this file before locking intake — if present and recent (< 30 min), warn: "An intake capture may be in progress. Continue?" Remove the advisory lock in step 14 after completion.
 
 2. **Check MCP** (for MCP sources): Use ToolSearch to check which MCP tools are available as deferred tools, then load them. Verify server responds. If not configured, show setup command from the Source Catalog table above.
 
@@ -70,9 +70,9 @@ Capture from an external source into the focused release's intake.
 
 13. **Generate summary.yaml (optional):** Content hints, entities mentioned, priority domains. Saved to `intake/{version}/summary.yaml`. Human-readable summary — not consumed by downstream agents.
 
-14. **Clean up advisory lock:** Remove `.planning/releases/{id}/intake/.capture-in-progress` file. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Update `releases[].intake.current` to match `release.yaml` `intake.current` (keep state.yaml cache in sync). Update `updated_at`, `session.last_action` (describe what was captured), `session.resume` (current context for session continuity).
+14. **Clean up advisory lock:** Remove `workspace/releases/{id}/intake/.capture-in-progress` file. **Update state.yaml:** Re-read `state.yaml` to get current values before writing. Update `releases[].intake.current` to match `release.yaml` `intake.current` (keep state.yaml cache in sync). Update `updated_at`, `session.last_action` (describe what was captured), `session.resume` (current context for session continuity).
 
-15. **Git commit:** Check `git status` for changes in `.planning/`. If changes exist, stage `.planning/` files and commit: `"chore: intake capture {source} for release {id}"`.
+15. **Git commit:** Check `git status` for changes in `workspace/`. If changes exist, stage `workspace/` files and commit: `"chore: intake capture {source} for release {id}"`.
 
 16. **Report** with source count, requirements extracted, conflicts resolved.
 
@@ -181,7 +181,7 @@ Show current intake version and stats (read-only).
 
 ## Notes
 
-- Intake is always release-scoped at `.planning/releases/{id}/intake/`
+- Intake is always release-scoped at `workspace/releases/{id}/intake/`
 - Never store credentials or secrets in intake files
 - Never copy raw source files — always produce `.md` digests (except `--raw` flag)
 - `--prompt` shapes requirement extraction, summary generation

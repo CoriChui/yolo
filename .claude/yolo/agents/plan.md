@@ -68,7 +68,7 @@ criteria should include passing lint and tests for the files it touches.
 
 - **Read-only** — read files for context, never modify
 - **Task limit** — respect `max_tasks` input (default 5)
-- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any .planning/ files
+- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any workspace/ files
 - Each task: id, title, description, files, depends_on, verification
 - Task IDs must be unique and descriptive (kebab-case)
 - No circular dependencies

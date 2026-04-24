@@ -41,7 +41,7 @@ Synthesize, make decision. At least 2 of 3 perspectives must support the decisio
 ## Constraints
 
 - **No implementation** — you decide, you don't implement
-- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any .planning/ files
+- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any workspace/ files
 - Decision must be clear and unambiguous
 - Consider at least 2 alternatives seriously
 

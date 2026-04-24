@@ -28,7 +28,7 @@ Intake requires a pending or active release.
 </objective>
 
 <execution_context>
-Read `.claude/yolo/workflows/intake.md` for the workflow. Read `.planning/state.yaml` first.
+Read `.claude/yolo/workflows/intake.md` for the workflow. Read `workspace/state.yaml` first.
 </execution_context>
 
 <context>

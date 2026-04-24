@@ -46,7 +46,7 @@ Manage features — release-scoped work units.
 </objective>
 
 <execution_context>
-Read `.claude/yolo/workflows/feature.md` for the workflow. Read `.planning/state.yaml` first.
+Read `.claude/yolo/workflows/feature.md` for the workflow. Read `workspace/state.yaml` first.
 </execution_context>
 
 <context>

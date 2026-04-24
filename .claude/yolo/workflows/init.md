@@ -1,7 +1,7 @@
 # Init Workflow
 # Command: /yolo:init
 
-Initialize YOLO in the current project. Check if `.planning/state.yaml` exists. If it exists, validate it is valid YAML and proceed to the repair/reinitialize flow (step 1). If not, proceed with fresh initialization (step 2+).
+Initialize YOLO in the current project. Check if `workspace/state.yaml` exists. If it exists, validate it is valid YAML and proceed to the repair/reinitialize flow (step 1). If not, proceed with fresh initialization (step 2+).
 
 ---
 
@@ -9,13 +9,13 @@ Initialize YOLO in the current project. Check if `.planning/state.yaml` exists. 
 
 ### Process
 
-1. **Check existing:** If `.planning/` exists, check for partial state (e.g., `state.yaml` missing but `releases/` present). If partial, warn user and ask: repair (fill missing files), reinitialize (destructive), or skip. **On repair:** fill missing files with defaults, then also run the schema validation from step 6 on `state.yaml` (whether existing or newly created) to catch corruption or missing fields. Also validate `config.yaml` schema. If fully intact, validate `config.yaml` schema — check for missing fields (e.g., `limits.max_teammates`, `intake.max_files`) and add them with defaults if absent. Then ask: reinitialize (destructive) or skip.
+1. **Check existing:** If `workspace/` exists, check for partial state (e.g., `state.yaml` missing but `releases/` present). If partial, warn user and ask: repair (fill missing files), reinitialize (destructive), or skip. **On repair:** fill missing files with defaults, then also run the schema validation from step 6 on `state.yaml` (whether existing or newly created) to catch corruption or missing fields. Also validate `config.yaml` schema. If fully intact, validate `config.yaml` schema — check for missing fields (e.g., `limits.max_teammates`, `intake.max_files`) and add them with defaults if absent. Then ask: reinitialize (destructive) or skip.
 
 2. **Detect project:** Read the project's build config (e.g., `package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `Makefile`, etc.) for name and type. Fallback to directory name.
 
 3. **Create structure:**
    ```
-   .planning/
+   workspace/
    ├── state.yaml
    ├── config.yaml
    ├── decisions/
@@ -60,7 +60,7 @@ Initialize YOLO in the current project. Check if `.planning/state.yaml` exists. 
 
 6. **Validate state.yaml:** Re-read `state.yaml` and verify all required fields exist: `updated_at`, `focus.release`, `focus.feature`, `releases` (array), `session.run_active`, `session.run_started_at`, `session.last_action`, `session.resume`. If any field is missing, add it with default value, set `updated_at` to a fresh timestamp, and re-write.
 
-7. **Git commit (if changes exist):** Check `git status --porcelain .planning/` — if no changes, skip commit. Otherwise: `chore: initialize YOLO workflow system`
+7. **Git commit (if changes exist):** Check `git status --porcelain workspace/` — if no changes, skip commit. Otherwise: `chore: initialize YOLO workflow system`
 
 8. **Report** with next steps: `/yolo:release new <name>`.
 
@@ -68,6 +68,6 @@ Initialize YOLO in the current project. Check if `.planning/state.yaml` exists. 
 
 ## Notes
 
-- Never overwrite existing `.planning/` without explicit user confirmation
+- Never overwrite existing `workspace/` without explicit user confirmation
 - Git commit only attempted if inside a git repository
 - Project type detection is best-effort — falls back to "unknown"

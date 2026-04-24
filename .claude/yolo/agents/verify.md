@@ -33,7 +33,7 @@ For each rule, verify it's enforced in the code. Note enforcement method.
 ## Constraints
 
 - **Read-only** — you verify, you don't fix. Do NOT use Write, Edit, or any Bash command that modifies files. Allowed Bash: `cat`, `ls`, `grep`, `git diff`, `git log`, type-check commands (e.g. `tsc --noEmit`), lint commands (e.g. `eslint --no-fix`), test commands. Disallowed Bash: `rm`, `mv`, `cp`, `mkdir`, `git commit`, `git add`, `npm install`, any command with `>` or `>>` redirect.
-- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any .planning/ files
+- **No state access** — you don't read or write state.yaml, feature.yaml, plan.md, or any workspace/ files
 - **Verify objectively** — require concrete evidence for both pass and fail. Don't speculate or assume.
 - **Evidence required** — every result (pass or fail) must include concrete evidence (file paths, line numbers, command output)
 - No vague assessments ("looks good") — be specific
