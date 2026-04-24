@@ -1,6 +1,6 @@
 ---
 name: yolo:status
-description: Use when you need orientation after a context reset, want to know which features are in progress, or suspect the state is stuck. Reconciles all feature files against git evidence.
+description: Show overall project status
 argument-hint: ""
 allowed-tools:
   - Read
@@ -12,41 +12,18 @@ allowed-tools:
 ---
 
 <objective>
-Display overall project status by reconciling all feature files against git evidence.
-Reports each feature's derived step, drift status, and suggests next actions.
-Note: Write/Edit are needed for --apply reconciliation (crash recovery corrections).
+Display overall project status including releases, current feature, and suggested next action.
+Note: Write/Edit are needed for state.yaml reconciliation (crash recovery corrections).
 </objective>
+
+<execution_context>
+Read `.claude/yolo/workflows/status.md` for the workflow.
+</execution_context>
 
 <context>
 Arguments: $ARGUMENTS
 </context>
 
 <process>
-
-1. **Discover feature files:** `ls .planning/features/*.md 2>/dev/null` (exclude `done/` subdirectory)
-2. **For each feature file:**
-   - Read the `goal:` and `branch:` from frontmatter
-   - Run: `bash scripts/yolo-cli/reconcile.sh {feature_file} --repo .`
-   - Parse the "Current Step" line from output
-   - Note any drift items
-3. **Also check done features:** `ls .planning/features/done/*.md 2>/dev/null`
-4. **Display summary table:**
-   ```
-   YOLO v2 Status
-   ══════════════════════════════════════
-   Active Features:
-     {slug}  step: {step}  branch: {branch}  drift: {count}
-     ...
-   Completed Features: {count}
-   ```
-5. **If $ARGUMENTS contains "--apply":** re-run reconcile with `--apply` on all features with drift
-6. **Suggest next action** based on the active feature's step:
-   - `think` → "Describe what you want to build — I'll continue planning"
-   - `plan` → "Plan exists but no tasks started — say 'let's start' and I'll begin execution"
-   - `do` → "Tell me to continue and I'll resume executing remaining tasks"
-   - `do-fix` → "Verification failed — tell me to fix and I'll address the issues"
-   - `check` → "All tasks done — tell me to verify and I'll run checks"
-   - `ship` → "Verified — tell me to ship and I'll merge"
-   - `done` → "Feature is complete"
-
+Read `.planning/state.yaml` and follow `.claude/yolo/workflows/status.md`.
 </process>
