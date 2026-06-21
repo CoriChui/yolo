@@ -90,14 +90,24 @@ The release was never the right owner of intake — proof: intake captured for r
 
 ### 4.4 Methodology as skills
 
-YOLO's *how* is carried by skills the model invokes by reasoning, not a fixed phase pipeline:
+YOLO's *how* is carried by **single-purpose skills the model invokes by intent-matching**, not a fixed phase pipeline. One **orchestrator** composes the **methodology atoms**; the rest are **standalone acts**. Each skill maps to a distinct, recognizable user intent (its trigger `description`), so conversational entry (§4.5) fires unambiguously.
 
-- `yolo-research` — explore the codebase / cited intake, gather context
-- `yolo-plan` — break a goal into tasks with a committed `plan.md`
-- `yolo-verify` — check work against `success_criteria`, emit `verification.md`
-- `yolo-finish` — the finishing policy (§4.6)
-- `yolo-roadmap` — decompose a big goal into N atomic feature briefs (§4.8). A one-time act that *returns briefs*, not a container.
-- *(optional)* `yolo-decide` — multi-perspective design decision (largely intact from today)
+| Skill | Trigger intent (`description`) | Role |
+|---|---|---|
+| `yolo-feature` *(orchestrator)* | "build / add / implement X" | The conversational entry: capture intent → draft a brief (goal + success_criteria) → confirm before billed work → compose the atoms → land. |
+| `yolo-research` | "understand the code / how X works before changing it" | Read-only exploration of codebase + cited intake → context. |
+| `yolo-plan` | "break this into tasks / make a plan" | → committed `plan.md`. |
+| `yolo-verify` | "check it meets the criteria / does this work" | → `verification.md` + `YOLO-Verified` trailer. |
+| `yolo-finish` | "ship it / land this / open a PR" | The finishing policy + risk classifier (§4.6). |
+| `yolo-roadmap` | "break this epic into features / plan a milestone" | Decompose a big goal → N briefs (§4.8). No container. |
+| `yolo-intake` | "pull in this Figma / GDoc / DB schema" | JIT fetch or persist to the shelf (§4.3). |
+| `yolo-decide` | "help me decide X vs Y" | Multi-perspective design decision (largely intact from today). |
+| `yolo-status` | "where do things stand / where was I" | Computes the derived view from git (§4.2). |
+| `yolo-init` | "set up YOLO here" | Scaffolds `config.yaml`, the intake shelf, and the CLAUDE.md routing block. |
+
+**Execution is deliberately *not* a skill** — it maps to no distinct user intent ("build X" is `yolo-feature`'s job). The orchestrator writes code itself via TDD + subagents, committing **one task per commit with a `YOLO-Task:` trailer** (§4.2). The commit/trailer convention is documented once and followed at execution time, not surfaced as a skill.
+
+**Composition:** `yolo-feature` → `yolo-research`? → `yolo-plan` → execute (TDD + subagents) → `yolo-verify` → `yolo-finish`. `yolo-roadmap` emits briefs that `yolo-feature` later picks up. The atoms are **defined once and reused** — also invokable alone when the user wants only that step (e.g., "just make a plan, don't build it"). They are never inlined into the orchestrator.
 
 The model orchestrates with TodoWrite + subagents. Slash commands survive as **escape hatches** (`/yolo:verify` right now), not the primary interface.
 
@@ -119,6 +129,44 @@ The model orchestrates with TodoWrite + subagents. Slash commands survive as **e
 - **The PR description is the summary** — generated from brief (what) + plan (how) + diff (the work) + verification (evidence). Collapses the separate `summary.md`. For the local-merge path, the condensed version goes in the `--no-ff` merge-commit message.
 
 Rationale: this matches the actual risk gradient — CI is cheap insurance you always want; human review is expensive attention spent only on risk; worktrees (below) are isolation paid for only when something is actually concurrent.
+
+#### 4.6.1 The risk classifier (auto-merge vs human review)
+
+Governs only the *human-review* gate on the PR path; CI-green is a separate precondition. **Default to auto-merge; escalate to human review on any trigger below. Conservative by default — when uncertain, escalate** (a needless ask is cheap; a silently-merged payments bug is not). The model *is* the classifier, anchored to explicit checkable rules: it may escalate on its own judgment but can never *de*-escalate past a hard trigger.
+
+Decision order:
+1. Push → PR opened → CI runs.
+2. CI red or pending → never auto-merge (red stops; pending polls).
+3. CI green **and** no trigger → auto-merge; PR body becomes the summary.
+4. CI green **but** a trigger fires → stop, set the PR body, surface the specific trigger(s), wait for the human.
+
+**Hard triggers — always escalate, even in `auto` mode** (auto skips polite prompts, never safety gates):
+- `yolo-verify` did not cleanly pass, or `success_criteria` were vague / unmeasurable.
+- Change touches a **sensitive path** (configurable; defaults below: auth, billing/payments, secrets/`.env`, DB migrations, deploy/CI config, infra).
+- Deletion or rename of a public API or widely-imported symbol (breaking surface).
+
+**Soft triggers — escalate when crossed** (thresholds in `config.yaml`):
+- Diff exceeds the size ceiling (default ~400 changed lines or ~15 files).
+- A new external dependency is added (package-manifest change).
+- New logic shipped with no accompanying tests.
+
+`config.yaml` addition:
+```yaml
+risk:
+  sensitive_paths:
+    - "**/auth/**"
+    - "**/billing/**"
+    - "**/payment*/**"
+    - "**/migrations/**"
+    - "**/*.env*"
+    - "**/secrets/**"
+    - "Dockerfile"
+    - "**/deploy/**"
+    - "**/.github/workflows/**"
+    - ".gitlab-ci.yml"
+  max_diff_lines: 400
+  max_diff_files: 15
+```
 
 ### 4.7 Worktrees
 
@@ -199,10 +247,12 @@ Everything else is a model judgment call.
 
 1. **Trailer schema** — exact trailer keys/values and whether `yolo-verify` writes `YOLO-Verified: true` as a trailer, a `verification.md` commit, or both.
 2. **Brief location** — `workspace/features/<slug>/brief.md` vs a flatter `briefs/<slug>.md`. Affects how `/yolo:status` globs.
-3. **Risk classifier** — the concrete signal list and thresholds that route a PR to auto-merge vs human review.
-4. **Skill boundaries** — final decomposition and the trigger `description` wording for each `yolo-*` skill (this is what makes conversational entry reliable).
-5. **`config.yaml` survival** — confirm the minimal field set; verify nothing in it is actually derivable state in disguise.
-6. **CLAUDE.md routing block wording** — the exact precedence statement vs superpowers, and the cheap-vs-billed boundary phrasing.
+3. **`config.yaml` survival** — confirm the minimal field set; verify nothing in it is actually derivable state in disguise.
+4. **CLAUDE.md routing block wording** — the exact precedence statement vs superpowers, and the cheap-vs-billed boundary phrasing.
+
+**Resolved during design:**
+- ~~Risk classifier~~ → §4.6.1 (hard/soft triggers, decision order, `config.yaml risk:` block).
+- ~~Skill boundaries~~ → §4.4 (orchestrator + atoms + standalone acts table, composition graph, execution-is-not-a-skill).
 
 ## 10. Headline
 
