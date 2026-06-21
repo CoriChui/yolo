@@ -1,0 +1,38 @@
+# YOLO configuration — genuine config only. NEVER tracked state.
+# Copied into workspace/config.yaml by `yolo-init`. Runtime state lives in git, not here.
+
+project:
+  name: ""                 # set at init (repo dir name)
+  base_branch: "main"      # merge target; init auto-detects "master" if "main" is absent
+
+agents:                    # model tier per methodology skill (spec §4.4)
+  research: opus
+  plan: opus
+  execute: sonnet
+  verify: haiku
+  roadmap: opus
+  decide: opus
+
+finish:                    # finishing policy (spec §4.6)
+  mode: pr                 # pr | local  — default landing path
+  ci: auto                 # auto = gate on CI if configured, else fall back to yolo-verify
+                           # require = always demand green CI; off = never wait on CI
+  auto_merge_on_green: true
+
+risk:                      # risk classifier inputs (spec §4.6.1)
+  sensitive_paths:
+    - "**/auth/**"
+    - "**/billing/**"
+    - "**/payment*/**"
+    - "**/migrations/**"
+    - "**/*.env*"
+    - "**/secrets/**"
+    - "Dockerfile"
+    - "**/deploy/**"
+    - "**/.github/workflows/**"
+    - ".gitlab-ci.yml"
+  max_diff_lines: 400
+  max_diff_files: 15
+
+ux:
+  mode: interactive        # interactive | guided | auto
