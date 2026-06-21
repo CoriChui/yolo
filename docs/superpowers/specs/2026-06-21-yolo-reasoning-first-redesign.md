@@ -34,7 +34,7 @@ On Opus 4.8 (2026), a large fraction of YOLO's machinery is dead weight: the mod
 2. **Git is the source of truth.** Branches, commits (+ light trailers), merge state, and tags hold the state. Markdown artifacts (brief, plan, verification) hold the content. Everything travels with the branch automatically.
 3. **Methodology lives in skills, not a pipeline.** The model reaches for YOLO's *how* by intent-matching, the way superpowers decomposes into brainstorming / writing-plans / TDD / verification skills.
 4. **Conversation is auto-triggered and cheap; execution is gated and explicit.** The model freely enters "let's figure out this feature" from a plain sentence, but *stops and shows the plan* before anything billed runs.
-5. **Structure is adaptive, applied by judgment.** Heavy tools (worktrees, releases, intake digests, PR review) are reached for when their benefit is real and stay invisible when it isn't — not fixed pipeline phases.
+5. **Structure is adaptive, applied by judgment.** Heavy tools (worktrees, goal decomposition, intake digests, PR review) are reached for when their benefit is real and stay invisible when it isn't — not fixed pipeline phases.
 6. **A few hard gates protect billed/irreversible acts.** Everything else is a model judgment call.
 
 ## 4. Architecture
@@ -68,7 +68,7 @@ Most of today's YAML is already redundant with git:
 - **Commit trailers** for task completion and verification, e.g.:
   - `YOLO-Task: setup-auth-middleware`
   - `YOLO-Verified: true`
-- **Annotated tags** are the *only* surviving form of "release" — an optional label over a span of merges, applied when you genuinely ship a cohesive body of work. Never required.
+- **Annotated tags** mark shipped milestones (§4.8) — an optional label over a span of merges. Never required.
 
 **What git cannot hold — and the answer for each:**
 
@@ -96,7 +96,7 @@ YOLO's *how* is carried by skills the model invokes by reasoning, not a fixed ph
 - `yolo-plan` — break a goal into tasks with a committed `plan.md`
 - `yolo-verify` — check work against `success_criteria`, emit `verification.md`
 - `yolo-finish` — the finishing policy (§4.6)
-- *(optional)* `yolo-release` — only when genuinely scoping a large cohesive body of work (becomes a tag over merges)
+- `yolo-roadmap` — decompose a big goal into N atomic feature briefs (§4.8). A one-time act that *returns briefs*, not a container.
 - *(optional)* `yolo-decide` — multi-perspective design decision (largely intact from today)
 
 The model orchestrates with TodoWrite + subagents. Slash commands survive as **escape hatches** (`/yolo:verify` right now), not the primary interface.
@@ -129,6 +129,28 @@ Conditional, the model's call — not a mandatory phase. Spun up only when:
 
 Otherwise a plain branch in the current tree. Mirrors superpowers' `using-git-worktrees` skill. The question the model asks: "will anything else touch the tree while this runs?"
 
+### 4.8 Grouping without a container (replacing "release")
+
+"Release" today conflates two different things. Only one is worth keeping:
+
+- **(a) A planning *act*** — decompose a big fuzzy goal into features. Genuinely valuable.
+- **(b) A persistent *container with a lifecycle*** (`pending → active → completed`, owning features + intake, with gates and reconciliation) — the entire source of the friction.
+
+Every good thing lives in (a); every painful thing lives in (b). So the release **entity is deleted**, and its value is preserved by two lightweight pieces:
+
+1. **Decomposition skill (`yolo-roadmap`).** Hand it a big goal; it returns N atomic feature briefs — each a normal `brief + branch`. The decomposition is a one-time act that *returns briefs*, not an entity you then activate, run, and end. (This is the old `feature-breakdown` agent's value, kept; its lifecycle, dropped.)
+2. **An optional `milestone` label for grouping.** When features genuinely ship as a set, each brief carries a `milestone: <name>` frontmatter line (greppable), and at ship time it becomes an **annotated git tag** and/or a **forge milestone** (GitHub/GitLab native — `gh`/`glab` query them). Zero lifecycle, zero status, zero gates.
+
+| Release did | After |
+|---|---|
+| Decompose a big goal → features | ✅ `yolo-roadmap` skill |
+| "Group these as a cohesive set" | ✅ `milestone:` label + forge milestone/tag |
+| "What shipped in v1" | ✅ annotated tag |
+| Anchor intake | already moved to the project-level shelf (§4.3) |
+| `pending→active→completed` lifecycle, gates, reconciliation, `run_active`, DAG | ❌ deleted — this *was* the friction |
+
+Net: nothing actually used is lost; the obligation to *operate* a release disappears.
+
 ## 5. The thin durable spine (what remains)
 
 - **Committed markdown:** the brief, `plan.md`, `verification.md`, decisions.
@@ -144,7 +166,7 @@ Otherwise a plain branch in the current tree. Mirrors superpowers' `using-git-wo
 - Reconciliation, advisory locks, `.task-locks/`, TOCTOU guards, `run_active`
 - Retry counters (`research_retry_count`, `verify_retry_count`, `hook_gate_bypass_count`, `run_failure_count`)
 - `branch_point` storage (use `git merge-base`)
-- The mandatory release container and release-scoped intake
+- **The entire release entity** — the container, its `pending→active→completed` lifecycle, gates, `run_active`, and release-scoped intake. Its planning value survives as the `yolo-roadmap` skill + `milestone` label (§4.8)
 - Release-wide dependency DAG enforcement (a feature may still note a `depends_on` in its brief; the model honors it, but there is no DAG machine)
 
 **Kept (the real value):**
@@ -153,7 +175,7 @@ Otherwise a plain branch in the current tree. Mirrors superpowers' `using-git-wo
 - An audit trail (now the PR body / merge-commit message)
 - Worktree isolation (now conditional)
 - `/yolo:decide` (largely intact)
-- Releases — demoted to an optional tag/label over merges
+- Release's *planning value* — as the `yolo-roadmap` decomposition skill + optional `milestone` label/tag (§4.8); the release *entity* is gone
 - A few hard gates (§7)
 
 ## 7. The surviving hard gates
@@ -168,7 +190,7 @@ Everything else is a model judgment call.
 
 ## 8. Scope boundaries (YAGNI)
 
-- **No promotion** of a standalone feature into a release (releases are now just optional tags anyway).
+- **No promotion** machinery — every feature is atomic; adding a `milestone:` label to a brief is all "grouping" requires (§4.8).
 - **No two-stage spec/quality review** in execute for now — revisit as a separate follow-up.
 - **No cross-feature DAG tooling** beyond honoring a manually noted `depends_on`.
 - **No migration tooling** for existing v2 `workspace/` state in the first cut — this is a forward redesign; an existing-project migration path is a separate effort if needed.
