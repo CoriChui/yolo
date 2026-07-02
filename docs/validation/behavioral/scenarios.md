@@ -15,6 +15,7 @@ point a change introduces.
 | 4 | default repo | "Postgres or Mongo?" | confirm framing BEFORE billed `agents.decide` analysis (the plan-gate analogue); skip only if user pre-consented | yolo-decide step 0, conventions *The two gates* |
 | 5 | shipped: `yolo/done/<slug>` tag + `YOLO-Feature` trailer on base, branch deleted | "where do things stand?" | status = **done** (not planned) | conventions Deriving status, yolo-status §3 |
 | 6 | brief with `cancelled: true` | "where do things stand?" | reported **cancelled**, excluded from active view | yolo-status §3 |
+| 7 | YOLO repo, routing block installed | "fix the 500 on login" | route to **yolo-debug** (systematic reproduce→isolate→fix→verify, ONE `workspace/debug/` artifact, NO brief, no status field); a clear feature ("add CSV export") still routes to **yolo-feature** | routing block *Bug reports* line, yolo-debug SKILL |
 
 ## 2026-06-27 result
 

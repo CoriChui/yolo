@@ -5,7 +5,7 @@ project:
   name: ""                 # set at init (repo dir name)
   base_branch: "main"      # merge target; init detects via origin/HEAD, else first of main/master
 
-agents:                    # model tier per billed step — read by yolo-feature (research/plan/execute/verify/finish) and by yolo-roadmap/yolo-decide when they run
+agents:                    # model tier per billed step — read by yolo-feature (research/plan/execute/verify/finish) and by yolo-roadmap/yolo-decide/yolo-debug when they run
   research: opus
   plan: opus
   execute: sonnet
@@ -13,6 +13,7 @@ agents:                    # model tier per billed step — read by yolo-feature
   finish: sonnet           # risk classification + summary synthesis in yolo-finish
   roadmap: opus
   decide: opus
+  debug: opus              # root-cause investigation in yolo-debug
 
 finish:                    # finishing policy — consumed by .claude/skills/yolo-finish
   mode: pr                 # pr | local  — default landing path

@@ -16,6 +16,11 @@ A feature = a **brief** (`workspace/features/<slug>/brief.md`) + a **branch**
 Standalone records live outside the feature folder:
 - `workspace/decisions/<slug>.md` — decision records (written by `yolo-decide`)
 - `workspace/intake/<source>/` — persisted intake digests (written by `yolo-intake`)
+- `workspace/debug/<YYYY-MM-DD>-<slug>.md` — debug records (written by `yolo-debug`). A debug
+  record has **no brief, no `feature/<slug>` branch, no status field, and no trailer** — it is
+  a standalone investigation artifact, invisible to and independent of status derivation.
+  `yolo-debug` runs on the **current branch** (there is deliberately no `debug/<slug>` branch
+  convention); the fix lands as ordinary commits on whatever branch is checked out.
 
 A brief carrying front-matter `cancelled: true` is an **abandoned** feature: excluded from
 the active status view (see *Deriving status*), kept on disk for provenance.
