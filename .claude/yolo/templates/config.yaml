@@ -3,23 +3,26 @@
 
 project:
   name: ""                 # set at init (repo dir name)
-  base_branch: "main"      # merge target; init auto-detects "master" if "main" is absent
+  base_branch: "main"      # merge target; init detects via origin/HEAD, else first of main/master
 
-agents:                    # model tier per methodology skill (spec §4.4)
+agents:                    # model tier per billed step — read by yolo-feature (research/plan/execute/verify/finish) and by yolo-roadmap/yolo-decide when they run
   research: opus
   plan: opus
   execute: sonnet
   verify: haiku
+  finish: sonnet           # risk classification + summary synthesis in yolo-finish
   roadmap: opus
   decide: opus
 
-finish:                    # finishing policy (spec §4.6)
+finish:                    # finishing policy — consumed by .claude/skills/yolo-finish
   mode: pr                 # pr | local  — default landing path
   ci: auto                 # auto = gate on CI if configured, else fall back to yolo-verify
                            # require = always demand green CI; off = never wait on CI
-  auto_merge_on_green: true
+  auto_merge_on_green: false # HEADLESS/UNATTENDED RUNS ONLY: true pre-consents the ship gate so a green,
+                             # no-risk PR merges without a human. Default false — the ship gate asks a human.
+                             # In an interactive session, prefer a per-feature "just ship it" instead of setting this.
 
-risk:                      # risk classifier inputs (spec §4.6.1)
+risk:                      # risk classifier inputs — consumed by .claude/skills/yolo-finish
   sensitive_paths:
     - "**/auth/**"
     - "**/billing/**"
@@ -34,5 +37,7 @@ risk:                      # risk classifier inputs (spec §4.6.1)
   max_diff_lines: 400
   max_diff_files: 15
 
-ux:
-  mode: interactive        # interactive | guided | auto
+# Confirmation is not configured here. YOLO always confirms at exactly two gates — the plan
+# gate (before execute) and the ship gate (before merge); see ".claude/yolo/conventions.md"
+# (The two gates). Per-feature overrides are spoken in prose ("just ship it" / "walk me
+# through each step"), not set as a sticky mode.

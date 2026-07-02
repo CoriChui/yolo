@@ -13,7 +13,7 @@ Bring external material into reach. The shelf is project-level (`workspace/intak
 
 ## Procedure
 1. Identify the source type and reach it (MCP tool, WebFetch, a CLI, or a local file).
-2. If persisting: write the digested `.md` under `workspace/intake/<source>/` and commit. If JIT: keep it in working context only.
+2. If persisting: write the digested `.md` under `workspace/intake/<source>/` and commit (`yolo: intake <source>`). If JIT: keep it in working context only.
 3. A feature brief references persisted intake via its `intake_refs` list.
 
 ## Constraints

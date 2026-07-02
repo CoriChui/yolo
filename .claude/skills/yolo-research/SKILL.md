@@ -18,7 +18,7 @@ Read-only exploration. You gather the context a plan needs; you change nothing.
 4. Note: existing patterns/conventions to follow, integration points, risks, and any open questions that would block planning.
 
 ## Output
-Write a concise note to `workspace/features/<slug>/research.md` (or return it inline when standalone). Sections: Findings (with file:line), Patterns, Integration points, Risks, Open questions. Keep it tight — this feeds yolo-plan, not a human report.
+Write a concise note to `workspace/features/<slug>/research.md` (or return it inline when standalone) and commit it (`yolo: research <slug>`). Sections: Findings (with file:line), Patterns, Integration points, Risks, Open questions. Keep it tight — this feeds yolo-plan, not a human report.
 
 ## Constraints
 - Read-only: never edit code, never run mutating commands.

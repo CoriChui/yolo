@@ -1,5 +1,7 @@
 # YOLO Methodology Skills Implementation Plan
 
+> **Status: COMPLETED 2026-06-21 — historical record, not current instructions.** The live contract is `.claude/yolo/conventions.md` and the `yolo-*` skills.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the five reasoning-first skills that carry YOLO's methodology — `yolo-research`, `yolo-plan`, `yolo-verify`, `yolo-finish` (with the risk classifier), and the `yolo-feature` orchestrator — as Claude Code project skills that cite the Plan 1 contracts and drive work through git, not a state machine.

@@ -1,5 +1,7 @@
 # YOLO Standalone Acts + Routing Implementation Plan
 
+> **Status: COMPLETED 2026-06-21 — historical record, not current instructions.** The live contract is `.claude/yolo/conventions.md` and the `yolo-*` skills.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the five standalone YOLO skills (`yolo-status`, `yolo-roadmap`, `yolo-intake`, `yolo-decide`, `yolo-init`) and install the **CLAUDE.md routing block** that makes feature intent trigger `yolo-feature` conversationally — completing the user-facing surface of reasoning-first YOLO.

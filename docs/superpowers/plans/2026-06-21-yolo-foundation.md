@@ -1,5 +1,7 @@
 # YOLO Foundation Implementation Plan
 
+> **Status: COMPLETED 2026-06-21 — historical record, not current instructions.** The live contract is `.claude/yolo/conventions.md` and the `yolo-*` skills.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Establish the durable contracts of the reasoning-first YOLO — directory layout, `config.yaml`, the feature brief format, and the git-as-truth conventions (commit-trailer schema + derived-status rules) — so the methodology skills in later plans have a fixed foundation to build on.

@@ -1,7 +1,9 @@
 # YOLO Reasoning-First Redesign
 
 **Date:** 2026-06-21
-**Status:** Design — approved in brainstorming, pending implementation plan
+**Status:** IMPLEMENTED 2026-06-21 — historical design record. The live contract is
+`.claude/yolo/conventions.md` and the `yolo-*` skills; this document is kept for rationale
+only and is not current instructions. (Open questions in §9 were resolved during build.)
 **Supersedes the direction of:** the heavyweight v2 spec (`.claude/yolo/spec.md`, 858 lines)
 
 ---

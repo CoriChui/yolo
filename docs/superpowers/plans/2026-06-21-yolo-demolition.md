@@ -1,5 +1,7 @@
 # YOLO Demolition Implementation Plan
 
+> **Status: COMPLETED 2026-06-21 — historical record, not current instructions.** The live contract is `.claude/yolo/conventions.md` and the `yolo-*` skills.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the v2 heavyweight state machine — the 858-line `spec.md`, the agent prompts, the workflows, and the `/yolo:*` slash commands — now that the reasoning-first skills (Plans 1–3) fully replace them, leaving a clean codebase whose only YOLO surface is the skills + `conventions.md` + `templates/`.

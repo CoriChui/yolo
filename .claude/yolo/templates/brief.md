@@ -3,8 +3,9 @@ slug: ""                   # kebab-case; defines branch feature/<slug> and folde
 goal: ""                   # one sentence: what the user can do after this ships
 success_criteria: []       # observable, checkable behaviors — yolo-verify checks these
 milestone: null            # optional grouping label (replaces "release"); e.g. "mvp"
-depends_on: []             # optional NN-slug/slug list; honored by the model, no DAG machine
+depends_on: []             # optional slug list; surfaced by yolo-status/yolo-feature, no DAG machine
 intake_refs: []            # optional pointers into workspace/intake/<source>/
+cancelled: false           # set true to abandon: excluded from the active status view, kept for provenance
 created_at: ""             # ISO 8601 UTC
 ---
 
