@@ -26,8 +26,10 @@ X", "support dark mode", "let users reset their password".
   the ceremony threshold: just make the edit, no brief.
 - **Refactors / cleanups** with no new user-facing capability — do them directly unless the
   user explicitly wants it tracked as a feature.
-- **Bug reports** — "X is broken", "fix the 500 on login". v4 has no `debug` act yet, so fix
-  directly (a `yolo-debug` skill is a known gap).
+- **Bug reports** — "X is broken", "fix the 500 on login" → route to **`yolo-debug`** for a
+  systematic reproduce → isolate → fix → verify pass (a genuinely trivial one-line fix can
+  still just be made). If the fix turns out to need new capability, `yolo-debug` hands off to
+  `yolo-feature`.
 - **Other YOLO acts** — decisions, status, intake, roadmap (see *Other intents*).
 
 **Confidence tiers:**
@@ -52,7 +54,8 @@ confirmations — all per-feature prose overrides, see `.claude/yolo/conventions
 ### Other intents
 "where do things stand / where was I" → `yolo-status`; "break this epic into features / plan a
 milestone" → `yolo-roadmap`; "pull in this Figma/doc/schema" → `yolo-intake`; "help me decide X
-vs Y" → `yolo-decide`; "set up YOLO here" → `yolo-init`.
+vs Y" → `yolo-decide`; "debug this / why is X failing / fix the 500" → `yolo-debug`; "set up
+YOLO here" → `yolo-init`.
 
 **Individual steps** can also be invoked alone: "explore the code first" → `yolo-research`;
 "just make a plan" → `yolo-plan`; "verify this" → `yolo-verify`; "ship it / land this" →
