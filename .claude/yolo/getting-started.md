@@ -11,7 +11,7 @@ In a git repo with `.claude/` copied in, say:
 > set up YOLO here
 
 That runs **`yolo-init`**, which creates `workspace/config.yaml` and
-`workspace/{features,intake,decisions}/`, and installs the routing block into your
+`workspace/{features,intake,decisions,debug}/`, and installs the routing block into your
 `CLAUDE.md`. Open `workspace/config.yaml` and skim it — especially `project.base_branch` and
 the `agents.*` model tiers.
 
@@ -50,6 +50,8 @@ as **done** even after its branch is deleted.
 - **"break this epic into features"** → `yolo-roadmap` drafts several briefs at once.
 - **"should we use Postgres or Mongo?"** → `yolo-decide` records a decision under
   `workspace/decisions/`.
+- **"debug this failure" / "why is X breaking?"** → `yolo-debug` runs a systematic
+  reproduce → isolate → fix → verify pass and records it under `workspace/debug/`.
 - **"pull in this Figma / spec / schema"** → `yolo-intake` brings external material into context.
 - **"just make a plan"**, **"verify this"**, **"ship it"** → invoke a single step directly.
 
