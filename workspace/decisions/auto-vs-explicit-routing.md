@@ -78,4 +78,6 @@ The routing block stays the **single source of truth** for "what counts as featu
 - **Platform shift** — Claude Code ships a native intent-router, or the skill-description
   auto-trigger mechanism changes materially → re-evaluate the whole routing layer.
 - A **`yolo-debug` skill** lands → update the taxonomy so bug intent routes there instead of being
-  a pure negative.
+  a pure negative. **(ACTIONED 2026-07-02:** `yolo-debug` shipped on `feature/yolo-debug`; the
+  routing block's "Bug reports" line now routes bug intent to `yolo-debug`, with hand-off to
+  `yolo-feature` when a fix becomes new capability.**)**
