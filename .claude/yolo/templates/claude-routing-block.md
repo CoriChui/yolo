@@ -52,7 +52,7 @@ confirmations — all per-feature prose overrides, see `.claude/yolo/conventions
 
 ### Other intents
 "where do things stand / where was I" → `yolo-status`; "break this epic into features / plan a
-milestone" → `yolo-roadmap`; "pull in this Figma/doc/schema" → `yolo-intake`; "help me decide X
+milestone" → `yolo-roadmap`; "use the project docs as context for a feature" → `yolo-intake`; "help me decide X
 vs Y" → `yolo-decide`; "debug this / why is X failing / fix the 500" → `yolo-debug`; "set up
 YOLO here" → `yolo-init`.
 

@@ -5,6 +5,11 @@ project:
   name: ""                 # set at init (repo dir name)
   base_branch: "main"      # merge target; init detects via origin/HEAD, else first of main/master
 
+intake:                    # context-enrichment source — the folder yolo-intake READS for a feature's
+  folder: docs             # context (see .claude/skills/yolo-intake). Default `docs/`. yolo never
+                           # fetches or writes here; a docs engine / connector populates this folder
+                           # separately. Point elsewhere only if reference material lives outside docs/.
+
 agents:                    # model tier per billed step — read by yolo-feature (research/plan/execute/verify/finish) and by yolo-roadmap/yolo-decide/yolo-debug when they run
   research: opus
   plan: opus

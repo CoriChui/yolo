@@ -14,7 +14,7 @@ Read-only exploration. You gather the context a plan needs; you change nothing.
 ## Procedure
 1. Identify the relevant surface: `Glob`/`Grep` for the entities, modules, and routes named in the goal.
 2. Read the key files. Capture concrete `file:line` references — never vague summaries.
-3. If the brief lists `intake_refs`, read those digests under `workspace/intake/<source>/`. If a needed source is live and cheap (a URL, an MCP-reachable doc), fetch it just-in-time instead of expecting a stored digest.
+3. If the brief lists `intake_refs`, read those files from the intake folder (`intake.folder`, default `docs/`) — search the docs engine first. Do **not** fetch live sources for intake; if referenced context is missing from the folder, surface the gap (a docs-engine / connector step must add it first).
 4. Note: existing patterns/conventions to follow, integration points, risks, and any open questions that would block planning.
 
 ## Output

@@ -15,7 +15,7 @@ A feature = a **brief** (`workspace/features/<slug>/brief.md`) + a **branch**
 
 Standalone records live outside the feature folder:
 - `workspace/decisions/<slug>.md` — decision records (written by `yolo-decide`)
-- `workspace/intake/<source>/` — persisted intake digests (written by `yolo-intake`)
+- the **intake folder** (`intake.folder` in config, default `docs/`) — the context source `yolo-intake` **reads** for a feature; yolo never fetches, imports, or writes it — a docs engine / connector populates it separately
 - `workspace/debug/<YYYY-MM-DD>-<slug>.md` — debug records (written by `yolo-debug`). A debug
   record has **no brief, no `feature/<slug>` branch, no status field, and no trailer** — it is
   a standalone investigation artifact, invisible to and independent of status derivation.
@@ -165,8 +165,8 @@ their own — the framing/feature-list — which is the plan-gate analogue for t
 
 ## Cheap vs billed
 
-- **Cheap** — run freely: intent capture, brief drafting, `yolo-status`, just-in-time
-  `yolo-intake`, and any read-only inspection.
+- **Cheap** — run freely: intent capture, brief drafting, `yolo-status`, read-only
+  `yolo-intake` (reads the intake folder), and any read-only inspection.
 - **Billed** — `yolo-research`, `yolo-plan`, execute, `yolo-verify`, `yolo-finish`, and the
   `yolo-roadmap`/`yolo-decide` analyses. The user's feature request authorizes the billed
   research + plan that lead to the **plan gate**; the plan gate authorizes execute + verify;

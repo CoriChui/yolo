@@ -37,7 +37,7 @@ source of truth every skill cites.
 | `yolo-roadmap` | you want a large goal decomposed into several feature briefs |
 | `yolo-decide` | you want a recorded, multi-perspective decision (X vs Y) |
 | `yolo-debug` | you have a bug and want a systematic reproduce → isolate → fix → verify pass |
-| `yolo-intake` | you want external material (Figma/doc/schema/URL) brought into context |
+| `yolo-intake` | you want a feature to draw on the project's docs for context (yolo reads the `docs/` folder; connectors/docs-engine fill it — yolo never fetches) |
 | `yolo-init` | you want to set up (or repair) YOLO in a repo |
 
 `yolo-feature` composes the lifecycle: capture intent → brief → research → plan →
@@ -47,7 +47,7 @@ source of truth every skill cites.
 
 1. Copy `.claude/` into your project root.
 2. Say **"set up YOLO here"** (runs `yolo-init`): it scaffolds `workspace/config.yaml` and
-   `workspace/{features,intake,decisions,debug}/`, and installs the routing block into your
+   `workspace/{features,decisions,debug}/` (plus `docs/`), and installs the routing block into your
    `CLAUDE.md`.
 3. Describe what you want to build. Claude drafts a brief, confirms, then drives the loop.
 
