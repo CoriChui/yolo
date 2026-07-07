@@ -104,9 +104,3 @@ say *"just ship it"* or *"walk me through each step"* per-feature in prose. See
 
 If `workspace/config.yaml` is absent, YOLO falls back to safe defaults (see
 `conventions.md` → *Config-absent fallback*).
-
-## Design history
-
-`docs/superpowers/` holds the original design spec and implementation plans (historical
-records of how YOLO was built). They are reference, not current instructions — the live
-contract is `conventions.md` and the skills.
