@@ -1,0 +1,12 @@
+{
+  "name": "yolo",
+  "description": "Reasoning-first, feature-aware development workflow for Claude Code. Git is the source of truth; status is derived, never stored. Turns 'I want X' into a planned, executed, verified, and landed change through eleven yolo-* skills Claude routes to from plain intent.",
+  "version": "0.4.0",
+  "author": { "name": "Konstantin Tsoy" },
+  "homepage": "https://github.com/CoriChui/yolo",
+  "repository": "https://github.com/CoriChui/yolo",
+  "license": "MIT",
+  "keywords": ["workflow", "claude-code", "spec-driven", "feature-development", "git", "agent", "skills"],
+  "skills": "./.claude/skills/",
+  "commands": "./.claude/commands/"
+}

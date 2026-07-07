@@ -43,13 +43,29 @@ source of truth every skill cites.
 `yolo-feature` composes the lifecycle: capture intent → brief → research → plan →
 **plan gate** → execute → verify → **ship gate**. Any step is also invokable on its own.
 
-## Quick start
+## Install
 
-1. Copy `.claude/` into your project root.
-2. Say **"set up YOLO here"** (runs `yolo-init`): it scaffolds `workspace/config.yaml` and
+**As a Claude Code plugin** (auto-updates):
+
+```
+/plugin marketplace add CoriChui/yolo
+/plugin install yolo@yolo
+```
+
+**Or copy it into a project** (vendored, tracked in your repo):
+
+```bash
+# from your project root
+git clone https://github.com/CoriChui/yolo.git /tmp/yolo && cp -r /tmp/yolo/.claude .
+```
+
+Then, either way:
+
+1. Say **"set up YOLO here"** (runs `yolo-init`): it scaffolds `workspace/config.yaml` and
    `workspace/{features,decisions,debug}/` (plus `docs/`), and installs the routing block into your
-   `CLAUDE.md`.
-3. Describe what you want to build. Claude drafts a brief, confirms, then drives the loop.
+   `CLAUDE.md`. It writes only project state — as a plugin, the framework stays installed and updates
+   through the marketplace.
+2. Describe what you want to build. Claude drafts a brief, confirms, then drives the loop.
 
 ### What one feature looks like
 

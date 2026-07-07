@@ -1,0 +1,12 @@
+{
+  "name": "yolo",
+  "owner": { "name": "CoriChui" },
+  "description": "YOLO — reasoning-first, feature-aware development workflow for Claude Code.",
+  "plugins": [
+    {
+      "name": "yolo",
+      "source": ".",
+      "description": "Reasoning-first development workflow. Git is the source of truth; status is derived, never stored."
+    }
+  ]
+}

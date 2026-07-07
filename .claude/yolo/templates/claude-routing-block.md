@@ -6,6 +6,11 @@ status files** — see `.claude/yolo/conventions.md`. This block is the primary 
 routing guide; the machine auto-triggers live in each skill's `description`. The confidence
 tiers and does-NOT-route taxonomy below are unique to this block.
 
+> **File resolution:** YOLO may be installed as a plugin. If `${CLAUDE_PLUGIN_ROOT}` is set,
+> resolve framework paths (`.claude/yolo/...`, `.claude/skills/...`) against it; otherwise read
+> them project-relative. Project state (`workspace/`, this `CLAUDE.md`) is always project-local.
+> See *Where YOLO's files live* in `conventions.md`.
+
 ### Routing feature intent (auto-detect, then confirm at the gates)
 
 When a prompt expresses intent to **build / add / implement / create** a feature, route it to

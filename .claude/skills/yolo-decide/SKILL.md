@@ -15,6 +15,14 @@ Reach a defensible decision via multi-perspective analysis, and record it.
 4. Write `workspace/decisions/<slug>.md` with: decision, rationale, approach, alternatives_considered, dissents, revisit_triggers, confidence. Confirm before overwriting an existing slug.
 5. Commit (`yolo: decision <slug>`).
 
+## When to reach for `bakeoff` instead
+`yolo-decide` is a single-pass, multi-lens analysis — right for most X-vs-Y calls. For a **high-stakes,
+hard-to-reverse decision with several defensible options** (architecture, migration, tool selection), the
+[`bakeoff`](https://github.com/CoriChui/bakeoff) skill runs a heavier judged tournament: it generates
+diverse candidate solutions, auto-derives a rubric for the problem, scores each with independent judges,
+and adversarially refutes the leader. If `bakeoff` is installed, offer it for those cases, then record its
+verdict as the decision here (`workspace/decisions/<slug>.md`) so the trail stays in one place.
+
 ## Constraints
 - Read-only with respect to code; the only file you write is the decision record.
 - No status field; decisions are standalone records.

@@ -5,6 +5,18 @@ artifacts at the moment it is asked. This file is the single source of truth for
 naming, trailers, derivation, gating, and config rules every `yolo-*` skill relies on. Do
 not paraphrase these strings elsewhere — cite this file.
 
+## Where YOLO's files live (plugin vs copied)
+
+YOLO ships two ways, and **every `.claude/...` path in these skills resolves against whichever exists**:
+- **Installed as a Claude Code plugin** — the framework (`.claude/skills/`, `.claude/yolo/`) lives at
+  `${CLAUDE_PLUGIN_ROOT}/`. Read a reference like `.claude/yolo/conventions.md` as
+  `${CLAUDE_PLUGIN_ROOT}/.claude/yolo/conventions.md`; likewise for `.claude/yolo/templates/*`.
+- **Copied into the project** — the framework lives at the project root under `.claude/`; read paths as-is.
+
+Only **project state** — `workspace/` and the project `CLAUDE.md` — always lives in the project, in both
+modes. When resolving any framework file, prefer `${CLAUDE_PLUGIN_ROOT}` if that variable is set, else the
+project-relative path.
+
 ## The unit of work
 
 A feature = a **brief** (`workspace/features/<slug>/brief.md`) + a **branch**
