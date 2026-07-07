@@ -1,8 +1,8 @@
-# YOLO — You Only Live Once
+# YOLO
 
-A reasoning-first, feature-aware workflow framework for Claude Code. YOLO turns "I want X"
-into a planned, executed, verified, and landed change — driven by conversation and git, not
-by tracked status files.
+**Reasoning-first development for Claude Code. Git is the source of truth; status is derived, never stored.**
+
+YOLO turns "I want X" into a planned, executed, verified, and landed change, driven by conversation and git rather than tracked status files.
 
 ## Core ideas
 
